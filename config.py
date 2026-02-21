@@ -9,6 +9,10 @@ MQTT_SSL = True  # Enable SSL/TLS
 DS18B20_PIN = 22  # GPIO pin for DS18B20 temperature sensor
 DS18B20_PIN_2 = 21  # GPIO pin for second DS18B20 (water temp)
 
+# ISNS20 Current Sensor Configuration
+ISNS20_CS_PIN = 8  # GPIO pin for ISNS20 chip select
+ISNS20_SPI_PORT = 0  # SPI port 0 (SCK=GP2, MOSI=GP3, MISO=GP4)
+
 # Timing
 TEMP_UPDATE_INTERVAL_MS = 1000
 RECONNECT_DELAY_S = 5

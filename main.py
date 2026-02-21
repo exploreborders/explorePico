@@ -21,13 +21,15 @@ from config import (
     MQTT_SSL,
     DS18B20_PIN,
     DS18B20_PIN_2,
+    ISNS20_CS_PIN,
+    ISNS20_SPI_PORT,
     TEMP_UPDATE_INTERVAL_MS,
     RECONNECT_DELAY_S,
     TEMP_CONVERSION_TIME_MS,
     SENSOR_RETRY_INTERVAL_MS,
 )
 
-from sensors import DS18B20, DS18B20Manager
+from sensors import DS18B20, DS18B20Manager, ISNS20, ISNS20Manager
 
 micropython.alloc_emergency_exception_buf(200)
 
@@ -47,6 +49,9 @@ TOPIC_ROOM_TEMP_CONFIG = "homeassistant/sensor/pico_room_temp/config"
 TOPIC_WATER_TEMP_STATE = "pico/water_temp"
 TOPIC_WATER_TEMP_CONFIG = "homeassistant/sensor/pico_water_temp/config"
 
+TOPIC_CURRENT_STATE = "pico/current"
+TOPIC_CURRENT_CONFIG = "homeassistant/sensor/pico_current/config"
+
 led = machine.Pin("LED", machine.Pin.OUT)
 led.off()
 temp_sensor = machine.ADC(4)
@@ -55,6 +60,9 @@ wlan = network.WLAN(network.STA_IF)
 room_sensor = DS18B20Manager(DS18B20(DS18B20_PIN), "DS18B20", SENSOR_RETRY_INTERVAL_MS)
 water_sensor = DS18B20Manager(
     DS18B20(DS18B20_PIN_2), "DS18B20-2", SENSOR_RETRY_INTERVAL_MS
+)
+current_sensor = ISNS20Manager(
+    ISNS20(ISNS20_CS_PIN, ISNS20_SPI_PORT), "ISNS20", SENSOR_RETRY_INTERVAL_MS
 )
 
 mqtt_client = None
@@ -106,6 +114,7 @@ def log(tag: str, message: str) -> None:
 
 room_sensor.set_logger(log)
 water_sensor.set_logger(log)
+current_sensor.set_logger(log)
 
 
 def read_temperature() -> float:
@@ -196,17 +205,31 @@ def get_water_temp_config() -> dict:
     }
 
 
+def get_current_config() -> dict:
+    """Return current sensor config for Home Assistant discovery."""
+    return {
+        "name": "Pico Current",
+        "unique_id": "pico_current",
+        "state_topic": TOPIC_CURRENT_STATE,
+        "unit_of_measurement": "A",
+        "device_class": "current",
+        "device": get_device_info(),
+    }
+
+
 def publish_discovery() -> None:
     """Publish Home Assistant MQTT discovery configs."""
     led_config = ujson.dumps(get_led_config())
     temp_config = ujson.dumps(get_temp_config())
     room_temp_config = ujson.dumps(get_room_temp_config())
     water_temp_config = ujson.dumps(get_water_temp_config())
+    current_config = ujson.dumps(get_current_config())
 
     log("MQTT", f"LED config: {len(led_config)} bytes")
     log("MQTT", f"Temp config: {len(temp_config)} bytes")
     log("MQTT", f"Room temp config: {len(room_temp_config)} bytes")
     log("MQTT", f"Water temp config: {len(water_temp_config)} bytes")
+    log("MQTT", f"Current config: {len(current_config)} bytes")
 
     mqtt_client.publish(TOPIC_LED_CONFIG, led_config, retain=True)
     time.sleep(0.2)
@@ -215,6 +238,8 @@ def publish_discovery() -> None:
     mqtt_client.publish(TOPIC_ROOM_TEMP_CONFIG, room_temp_config, retain=True)
     time.sleep(0.2)
     mqtt_client.publish(TOPIC_WATER_TEMP_CONFIG, water_temp_config, retain=True)
+    time.sleep(0.2)
+    mqtt_client.publish(TOPIC_CURRENT_CONFIG, current_config, retain=True)
     time.sleep(0.2)
 
 
@@ -246,6 +271,15 @@ def publish_water_temperature() -> None:
         mqtt_publish(TOPIC_WATER_TEMP_STATE, str(temp))
     elif water_sensor.ever_connected:
         mqtt_publish(TOPIC_WATER_TEMP_STATE, "unavailable")
+
+
+def publish_current() -> None:
+    """Read and publish current from ISNS20 sensor."""
+    current = current_sensor.read()
+    if current is not None:
+        mqtt_publish(TOPIC_CURRENT_STATE, str(current))
+    elif current_sensor.ever_connected:
+        mqtt_publish(TOPIC_CURRENT_STATE, "unavailable")
 
 
 def on_message(topic: bytes, msg: bytes) -> None:
@@ -345,7 +379,7 @@ def handle_mqtt_message() -> None:
 
 
 def handle_temperature_publish() -> None:
-    """Publish temperature if interval has elapsed."""
+    """Publish temperature and current if interval has elapsed."""
     global last_temp_publish
 
     now = time.ticks_ms()
@@ -353,6 +387,7 @@ def handle_temperature_publish() -> None:
         publish_temperature()
         publish_room_temperature()
         publish_water_temperature()
+        publish_current()
         last_temp_publish = now
 
 
