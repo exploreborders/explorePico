@@ -23,7 +23,6 @@ from config import (
     TEMP_UPDATE_INTERVAL_MS,
     RECONNECT_DELAY_S,
     TEMP_CONVERSION_TIME_MS,
-    WATCHDOG_TIMEOUT_MS,
 )
 
 from sensors.ds18b20 import DS18B20
@@ -47,8 +46,6 @@ led = machine.Pin("LED", machine.Pin.OUT)
 led.off()
 temp_sensor = machine.ADC(4)
 wlan = network.WLAN(network.STA_IF)
-
-wdt = machine.WDT(timeout=WATCHDOG_TIMEOUT_MS)
 
 ds18b20 = DS18B20(DS18B20_PIN)
 ds18b20_initialized = False
@@ -107,9 +104,11 @@ def read_room_temperature() -> float | None:
             log("DS18B20", "Init failed!")
             return None
         log("DS18B20", "Initialized successfully")
+        time.sleep_ms(750)
+        temp = ds18b20.read(start_conversion=False)
         ds18b20.start_conversion()
         ds18b20_conversion_start = time.ticks_ms()
-        return None
+        return temp
 
     elapsed = time.ticks_diff(time.ticks_ms(), ds18b20_conversion_start)
     if elapsed >= TEMP_CONVERSION_TIME_MS:
@@ -352,7 +351,6 @@ def run_main_loop() -> None:
     try:
         handle_mqtt_message()
         handle_temperature_publish()
-        wdt.feed()
         time.sleep(0.1)
 
     except OSError as e:
@@ -381,7 +379,6 @@ def main() -> None:
     global last_temp_publish, mqtt_client
 
     log("BOOT", f"Starting Pico 2W MQTT Client - {uid}")
-    log("WDT", f"Watchdog enabled: {WATCHDOG_TIMEOUT_MS}ms")
 
     blink_pattern("111111")
 

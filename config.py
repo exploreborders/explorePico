@@ -13,9 +13,6 @@ TEMP_UPDATE_INTERVAL_MS = 1000
 RECONNECT_DELAY_S = 5
 TEMP_CONVERSION_TIME_MS = 750  # DS18B20 conversion time
 
-# Watchdog
-WATCHDOG_TIMEOUT_MS = 8000  # 8 seconds - max on Pico is ~8388ms
-
 # Try to import from secrets.py, fallback to this file for development
 try:
     from secrets import (
