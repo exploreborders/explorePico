@@ -32,7 +32,7 @@ class DS18B20:
 
     def start_conversion(self) -> bool:
         """Start temperature conversion (non-blocking). Call read() after ~750ms."""
-        if not self.ds or not self.roms:
+        if not self.ds or not self.roms or len(self.roms) == 0:
             return False
 
         try:
@@ -40,8 +40,7 @@ class DS18B20:
             self._conversion_started = True
             self._conversion_start_time = time.ticks_ms()
             return True
-        except Exception as e:
-            print(f"[DS18B20] Start conversion error: {e}")
+        except Exception:
             return False
 
     def is_conversion_ready(self) -> bool:
@@ -57,9 +56,7 @@ class DS18B20:
         If start_conversion=True, starts a new conversion and returns last value.
         If start_conversion=False, reads the result of previous conversion.
         """
-        if not self.ds or not self.roms:
-            if start_conversion:
-                self.start_conversion()
+        if not self.ds or not self.roms or len(self.roms) == 0:
             return self.last_value
 
         if start_conversion:
@@ -76,8 +73,7 @@ class DS18B20:
 
             return self.last_value
 
-        except Exception as e:
-            print(f"[DS18B20] Read error: {e}")
+        except Exception:
             self._conversion_started = False
             return self.last_value
 
