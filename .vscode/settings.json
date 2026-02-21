@@ -1,0 +1,6 @@
+{
+    "python.analysis.extraPaths": [
+        "/Users/christianhein/.vscode/extensions/benpaddlejones.pico-bridge-2.0.2/emulator/mock/typings",
+        "/Users/christianhein/.vscode/extensions/benpaddlejones.pico-bridge-2.0.2/emulator/mock/micropython"
+    ]
+}
