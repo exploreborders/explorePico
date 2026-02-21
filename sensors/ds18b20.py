@@ -86,3 +86,69 @@ class DS18B20:
     def get_last_value(self) -> float | None:
         """Get last known temperature value."""
         return self.last_value
+
+
+class DS18B20Manager:
+    """Wrapper for DS18B20 with auto-retry logic and hot-swap support."""
+
+    def __init__(
+        self, sensor: DS18B20, name: str, retry_interval_ms: int = 60000
+    ) -> None:
+        self.sensor = sensor
+        self.name = name
+        self.retry_interval_ms = retry_interval_ms
+        self.initialized = False
+        self.ever_connected = False
+        self.conversion_start = 0
+        self.last_retry = 0
+        self.log_func = print
+
+    def set_logger(self, logger) -> None:
+        """Set custom logger function."""
+        self.log_func = logger
+
+    def read(self, conversion_time_ms: int = 750) -> float | None:
+        """Read temperature with auto-retry logic."""
+        now = time.ticks_ms()
+
+        if not self.initialized:
+            should_retry = self.last_retry == 0
+            if not should_retry:
+                elapsed = time.ticks_diff(now, self.last_retry)
+                should_retry = elapsed >= self.retry_interval_ms
+
+            if should_retry:
+                self.log_func(self.name, "Initializing...")
+                self.initialized = self.sensor.init()
+                if not self.initialized:
+                    self.last_retry = now
+                    self.log_func(
+                        self.name,
+                        f"Init failed! Retrying in {self.retry_interval_ms // 1000}s...",
+                    )
+                    return None
+                self.ever_connected = True
+                self.last_retry = now
+                self.log_func(self.name, "Initialized successfully")
+                time.sleep_ms(750)
+                temp = self.sensor.read(start_conversion=False)
+                if temp is not None:
+                    self.sensor.start_conversion()
+                    self.conversion_start = time.ticks_ms()
+                return temp
+            return None
+
+        elapsed = time.ticks_diff(now, self.conversion_start)
+        if elapsed >= conversion_time_ms:
+            temp = self.sensor.read(start_conversion=False)
+            if temp is not None:
+                self.sensor.start_conversion()
+                self.conversion_start = time.ticks_ms()
+                return temp
+            else:
+                self.log_func(self.name, "Sensor disconnected")
+                self.initialized = False
+                self.last_retry = 0
+                return None
+
+        return self.sensor.get_last_value()

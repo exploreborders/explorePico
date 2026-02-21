@@ -27,7 +27,7 @@ from config import (
     SENSOR_RETRY_INTERVAL_MS,
 )
 
-from sensors.ds18b20 import DS18B20
+from sensors import DS18B20, DS18B20Manager
 
 micropython.alloc_emergency_exception_buf(200)
 
@@ -52,16 +52,12 @@ led.off()
 temp_sensor = machine.ADC(4)
 wlan = network.WLAN(network.STA_IF)
 
-ds18b20 = DS18B20(DS18B20_PIN)
-ds18b20_2 = DS18B20(DS18B20_PIN_2)
-ds18b20_initialized = False
-ds18b20_2_initialized = False
-ds18b20_ever_connected = False
-ds18b20_2_ever_connected = False
-ds18b20_conversion_start = 0
-ds18b20_2_conversion_start = 0
-ds18b20_last_retry = 0
-ds18b20_2_last_retry = 0
+room_sensor = DS18B20Manager(
+    DS18B20(DS18B20_PIN), "DS18B20", SENSOR_RETRY_INTERVAL_MS
+)
+water_sensor = DS18B20Manager(
+    DS18B20(DS18B20_PIN_2), "DS18B20-2", SENSOR_RETRY_INTERVAL_MS
+)
 
 mqtt_client = None
 led_state = False
@@ -103,100 +99,6 @@ def read_temperature() -> float:
     voltage = reading * 3.3 / 65535
     temp_c = 27 - (voltage - 0.706) / 0.001721
     return round(temp_c, 1)
-
-
-def read_room_temperature() -> float | None:
-    """Read external DS18B20 temperature sensor using non-blocking reads with auto-retry."""
-    global ds18b20_initialized, ds18b20_conversion_start, ds18b20_ever_connected
-    global ds18b20_last_retry
-
-    now = time.ticks_ms()
-
-    if not ds18b20_initialized:
-        should_retry = ds18b20_last_retry == 0
-        if not should_retry:
-            elapsed = time.ticks_diff(now, ds18b20_last_retry)
-            should_retry = elapsed >= SENSOR_RETRY_INTERVAL_MS
-
-        if should_retry:
-            log("DS18B20", "Initializing...")
-            ds18b20_initialized = ds18b20.init()
-            if not ds18b20_initialized:
-                ds18b20_last_retry = now
-                log("DS18B20", "Init failed! Retrying in 60s...")
-                return None
-            ds18b20_ever_connected = True
-            ds18b20_last_retry = now
-            log("DS18B20", "Initialized successfully")
-            time.sleep_ms(750)
-            temp = ds18b20.read(start_conversion=False)
-            if temp is not None:
-                ds18b20.start_conversion()
-                ds18b20_conversion_start = time.ticks_ms()
-            return temp
-        return None
-
-    elapsed = time.ticks_diff(now, ds18b20_conversion_start)
-    if elapsed >= TEMP_CONVERSION_TIME_MS:
-        temp = ds18b20.read(start_conversion=False)
-        if temp is not None:
-            ds18b20.start_conversion()
-            ds18b20_conversion_start = time.ticks_ms()
-            return temp
-        else:
-            log("DS18B20", "Sensor disconnected")
-            ds18b20_initialized = False
-            ds18b20_last_retry = 0
-            return None
-
-    return ds18b20.get_last_value()
-
-
-def read_water_temperature() -> float | None:
-    """Read second DS18B20 temperature sensor (water temp) with auto-retry."""
-    global ds18b20_2_initialized, ds18b20_2_conversion_start, ds18b20_2_ever_connected
-    global ds18b20_2_last_retry
-
-    now = time.ticks_ms()
-
-    if not ds18b20_2_initialized:
-        should_retry = ds18b20_2_last_retry == 0
-        if not should_retry:
-            elapsed = time.ticks_diff(now, ds18b20_2_last_retry)
-            should_retry = elapsed >= SENSOR_RETRY_INTERVAL_MS
-
-        if should_retry:
-            log("DS18B20-2", "Initializing...")
-            ds18b20_2_initialized = ds18b20_2.init()
-            if not ds18b20_2_initialized:
-                ds18b20_2_last_retry = now
-                log("DS18B20-2", "Init failed! Retrying in 60s...")
-                return None
-            ds18b20_2_ever_connected = True
-            ds18b20_2_last_retry = now
-            log("DS18B20-2", "Initialized successfully")
-            time.sleep_ms(750)
-            temp = ds18b20_2.read(start_conversion=False)
-            if temp is not None:
-                ds18b20_2.start_conversion()
-                ds18b20_2_conversion_start = time.ticks_ms()
-            return temp
-        return None
-
-    elapsed = time.ticks_diff(now, ds18b20_2_conversion_start)
-    if elapsed >= TEMP_CONVERSION_TIME_MS:
-        temp = ds18b20_2.read(start_conversion=False)
-        if temp is not None:
-            ds18b20_2.start_conversion()
-            ds18b20_2_conversion_start = time.ticks_ms()
-            return temp
-        else:
-            log("DS18B20-2", "Sensor disconnected")
-            ds18b20_2_initialized = False
-            ds18b20_2_last_retry = 0
-            return None
-
-    return ds18b20_2.get_last_value()
 
 
 def connect_wifi() -> bool:
@@ -290,10 +192,12 @@ def publish_discovery() -> None:
     led_config = ujson.dumps(get_led_config())
     temp_config = ujson.dumps(get_temp_config())
     room_temp_config = ujson.dumps(get_room_temp_config())
+    water_temp_config = ujson.dumps(get_water_temp_config())
 
     log("MQTT", f"LED config: {len(led_config)} bytes")
     log("MQTT", f"Temp config: {len(temp_config)} bytes")
     log("MQTT", f"Room temp config: {len(room_temp_config)} bytes")
+    log("MQTT", f"Water temp config: {len(water_temp_config)} bytes")
 
     mqtt_client.publish(TOPIC_LED_CONFIG, led_config, retain=True)
     time.sleep(0.2)
@@ -301,9 +205,6 @@ def publish_discovery() -> None:
     time.sleep(0.2)
     mqtt_client.publish(TOPIC_ROOM_TEMP_CONFIG, room_temp_config, retain=True)
     time.sleep(0.2)
-
-    water_temp_config = ujson.dumps(get_water_temp_config())
-    log("MQTT", f"Water temp config: {len(water_temp_config)} bytes")
     mqtt_client.publish(TOPIC_WATER_TEMP_CONFIG, water_temp_config, retain=True)
     time.sleep(0.2)
 
@@ -322,21 +223,19 @@ def publish_temperature() -> None:
 
 def publish_room_temperature() -> None:
     """Read and publish room temperature from DS18B20."""
-    global ds18b20_ever_connected
-    temp = read_room_temperature()
+    temp = room_sensor.read(TEMP_CONVERSION_TIME_MS)
     if temp is not None:
         mqtt_client.publish(TOPIC_ROOM_TEMP_STATE, str(temp), retain=True)
-    elif ds18b20_ever_connected:
+    elif room_sensor.ever_connected:
         mqtt_client.publish(TOPIC_ROOM_TEMP_STATE, "unavailable", retain=True)
 
 
 def publish_water_temperature() -> None:
     """Read and publish water temperature from second DS18B20."""
-    global ds18b20_2_ever_connected
-    temp = read_water_temperature()
+    temp = water_sensor.read(TEMP_CONVERSION_TIME_MS)
     if temp is not None:
         mqtt_client.publish(TOPIC_WATER_TEMP_STATE, str(temp), retain=True)
-    elif ds18b20_2_ever_connected:
+    elif water_sensor.ever_connected:
         mqtt_client.publish(TOPIC_WATER_TEMP_STATE, "unavailable", retain=True)
 
 
