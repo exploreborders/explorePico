@@ -27,6 +27,7 @@ from config import (
     RECONNECT_DELAY_S,
     TEMP_CONVERSION_TIME_MS,
     SENSOR_RETRY_INTERVAL_MS,
+    validate_config,
 )
 
 from sensors import DS18B20, DS18B20Manager, ISNS20, ISNS20Manager
@@ -428,6 +429,8 @@ def run_main_loop() -> None:
 def main() -> None:
     """Main entry point."""
     global last_temp_publish, mqtt_client
+
+    validate_config()
 
     log("BOOT", f"Starting Pico 2W MQTT Client - {uid}")
 

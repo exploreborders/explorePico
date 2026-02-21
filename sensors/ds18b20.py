@@ -70,12 +70,6 @@ class DS18B20:
             self._conversion_started = False
             return self.last_value
 
-    def read_blocking(self) -> float | None:
-        """Blocking read - starts conversion and waits for result."""
-        self.start_conversion()
-        time.sleep_ms(750)
-        return self.read(start_conversion=False)
-
     def get_last_value(self) -> float | None:
         """Get last known temperature value."""
         return self.last_value
