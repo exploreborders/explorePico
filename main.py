@@ -52,9 +52,7 @@ led.off()
 temp_sensor = machine.ADC(4)
 wlan = network.WLAN(network.STA_IF)
 
-room_sensor = DS18B20Manager(
-    DS18B20(DS18B20_PIN), "DS18B20", SENSOR_RETRY_INTERVAL_MS
-)
+room_sensor = DS18B20Manager(DS18B20(DS18B20_PIN), "DS18B20", SENSOR_RETRY_INTERVAL_MS)
 water_sensor = DS18B20Manager(
     DS18B20(DS18B20_PIN_2), "DS18B20-2", SENSOR_RETRY_INTERVAL_MS
 )
@@ -62,8 +60,21 @@ water_sensor = DS18B20Manager(
 mqtt_client = None
 led_state = False
 last_temp_publish = 0
-wifi_connected = False
-mqtt_connected = False
+
+# Track last published values for all MQTT topics
+_last_mqtt_values = {}
+
+
+def mqtt_publish(topic: str, value: str, retain: bool = True) -> bool:
+    """Publish to MQTT only if value changed. Returns True if published."""
+    global _last_mqtt_values
+
+    key = (topic, retain)
+    if _last_mqtt_values.get(key) != value:
+        mqtt_client.publish(topic, value, retain=retain)
+        _last_mqtt_values[key] = value
+        return True
+    return False
 
 
 def blink(times: int, delay: float = 0.15, pause: float = 0.3) -> None:
@@ -93,6 +104,10 @@ def log(tag: str, message: str) -> None:
     print(f"[{tag}] {message}")
 
 
+room_sensor.set_logger(log)
+water_sensor.set_logger(log)
+
+
 def read_temperature() -> float:
     """Read internal temperature sensor (RP2350)."""
     reading = temp_sensor.read_u16()
@@ -103,7 +118,6 @@ def read_temperature() -> float:
 
 def connect_wifi() -> bool:
     """Connect to WiFi network with retry logic."""
-    global wifi_connected
     log("WiFi", "Connecting...")
     blink_pattern("10")
     wlan.active(True)
@@ -111,13 +125,11 @@ def connect_wifi() -> bool:
 
     for attempt in range(30):
         if wlan.isconnected():
-            wifi_connected = True
             log("WiFi", f"Connected! IP: {wlan.ifconfig()[0]}")
             blink_pattern("111")
             return True
         time.sleep(1)
 
-    wifi_connected = False
     log("WiFi", "Failed to connect")
     blink_pattern("1000")
     return False
@@ -125,11 +137,8 @@ def connect_wifi() -> bool:
 
 def ensure_wifi() -> bool:
     """Ensure WiFi is connected, reconnect if needed."""
-    global wifi_connected
     if wlan.isconnected():
-        wifi_connected = True
         return True
-    wifi_connected = False
     return connect_wifi()
 
 
@@ -212,31 +221,31 @@ def publish_discovery() -> None:
 def publish_led_state() -> None:
     """Publish current LED state."""
     state = "ON" if led_state else "OFF"
-    mqtt_client.publish(TOPIC_LED_STATE, state, retain=True)
+    mqtt_publish(TOPIC_LED_STATE, state)
 
 
 def publish_temperature() -> None:
     """Read and publish temperature."""
     temp = read_temperature()
-    mqtt_client.publish(TOPIC_TEMP_STATE, str(temp), retain=True)
+    mqtt_publish(TOPIC_TEMP_STATE, str(temp))
 
 
 def publish_room_temperature() -> None:
     """Read and publish room temperature from DS18B20."""
     temp = room_sensor.read(TEMP_CONVERSION_TIME_MS)
     if temp is not None:
-        mqtt_client.publish(TOPIC_ROOM_TEMP_STATE, str(temp), retain=True)
+        mqtt_publish(TOPIC_ROOM_TEMP_STATE, str(temp))
     elif room_sensor.ever_connected:
-        mqtt_client.publish(TOPIC_ROOM_TEMP_STATE, "unavailable", retain=True)
+        mqtt_publish(TOPIC_ROOM_TEMP_STATE, "unavailable")
 
 
 def publish_water_temperature() -> None:
     """Read and publish water temperature from second DS18B20."""
     temp = water_sensor.read(TEMP_CONVERSION_TIME_MS)
     if temp is not None:
-        mqtt_client.publish(TOPIC_WATER_TEMP_STATE, str(temp), retain=True)
+        mqtt_publish(TOPIC_WATER_TEMP_STATE, str(temp))
     elif water_sensor.ever_connected:
-        mqtt_client.publish(TOPIC_WATER_TEMP_STATE, "unavailable", retain=True)
+        mqtt_publish(TOPIC_WATER_TEMP_STATE, "unavailable")
 
 
 def on_message(topic: bytes, msg: bytes) -> None:
@@ -282,7 +291,7 @@ def create_mqtt_client() -> MQTTClient:
 
 def connect_mqtt() -> bool:
     """Connect to MQTT broker and set up subscriptions."""
-    global mqtt_client, mqtt_connected
+    global mqtt_client
 
     log("MQTT", "Connecting...")
     blink_pattern("01")
@@ -290,7 +299,6 @@ def connect_mqtt() -> bool:
     try:
         mqtt_client = create_mqtt_client()
         mqtt_client.connect()
-        mqtt_connected = True
         log("MQTT", "Connected!")
 
         time.sleep(1)
@@ -311,7 +319,6 @@ def connect_mqtt() -> bool:
         return True
 
     except Exception as e:
-        mqtt_connected = False
         log("ERROR", f"MQTT connection failed: {e}")
         blink_pattern("10000")
         disconnect_mqtt()
@@ -320,7 +327,7 @@ def connect_mqtt() -> bool:
 
 def disconnect_mqtt() -> None:
     """Safely disconnect from MQTT broker."""
-    global mqtt_client, mqtt_connected
+    global mqtt_client
 
     if mqtt_client is not None:
         try:
@@ -330,7 +337,6 @@ def disconnect_mqtt() -> None:
             log("WARN", f"Disconnect error: {e}")
         finally:
             mqtt_client = None
-            mqtt_connected = False
 
 
 def handle_mqtt_message() -> None:
@@ -352,7 +358,7 @@ def handle_temperature_publish() -> None:
 
 def run_main_loop() -> None:
     """Run the main MQTT loop."""
-    global mqtt_client, mqtt_connected
+    global mqtt_client
 
     try:
         handle_mqtt_message()
@@ -360,7 +366,6 @@ def run_main_loop() -> None:
         time.sleep(0.1)
 
     except OSError as e:
-        mqtt_connected = False
         log("WARN", f"Connection lost: {e}")
         blink_pattern("100")
         disconnect_mqtt()
@@ -368,7 +373,6 @@ def run_main_loop() -> None:
 
     except Exception as e:
         err_str = str(e)
-        mqtt_connected = False
         if "closed" in err_str.lower() or "ECONNRESET" in err_str:
             log("WARN", "Connection closed by broker")
             blink_pattern("100")

@@ -130,13 +130,17 @@ class DS18B20Manager:
                 self.ever_connected = True
                 self.last_retry = now
                 self.log_func(self.name, "Initialized successfully")
+                self.sensor.start_conversion()
                 time.sleep_ms(750)
                 temp = self.sensor.read(start_conversion=False)
-                if temp is not None:
-                    self.sensor.start_conversion()
-                    self.conversion_start = time.ticks_ms()
+                self.conversion_start = time.ticks_ms()
                 return temp
             return None
+
+        if self.conversion_start == 0:
+            self.sensor.start_conversion()
+            self.conversion_start = time.ticks_ms()
+            return self.sensor.get_last_value()
 
         elapsed = time.ticks_diff(now, self.conversion_start)
         if elapsed >= conversion_time_ms:
