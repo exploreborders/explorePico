@@ -118,7 +118,13 @@ current_sensor.set_logger(log)
 
 
 def read_temperature() -> float:
-    """Read internal temperature sensor (RP2350)."""
+    """Read internal temperature sensor (RP2350).
+
+    Uses RP2350 band-gap temperature sensor calibration:
+    - 27°C baseline at 0V output
+    - 0.706V reference voltage at 27°C
+    - 0.001721 V/°C temperature coefficient
+    """
     reading = temp_sensor.read_u16()
     voltage = reading * 3.3 / 65535
     temp_c = 27 - (voltage - 0.706) / 0.001721

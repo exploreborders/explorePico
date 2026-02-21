@@ -43,13 +43,6 @@ class DS18B20:
         except Exception:
             return False
 
-    def is_conversion_ready(self) -> bool:
-        """Check if conversion is ready (750ms elapsed)."""
-        if not self._conversion_started:
-            return False
-        elapsed = time.ticks_diff(time.ticks_ms(), self._conversion_start_time)
-        return elapsed >= 750
-
     def read(self, start_conversion: bool = True) -> float | None:
         """Read temperature in Celsius. Returns last known value on error.
 
@@ -131,10 +124,8 @@ class DS18B20Manager:
                 self.last_retry = now
                 self.log_func(self.name, "Initialized successfully")
                 self.sensor.start_conversion()
-                time.sleep_ms(750)
-                temp = self.sensor.read(start_conversion=False)
                 self.conversion_start = time.ticks_ms()
-                return temp
+                return self.sensor.get_last_value()
             return None
 
         if self.conversion_start == 0:
