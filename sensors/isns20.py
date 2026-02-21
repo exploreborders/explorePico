@@ -73,86 +73,12 @@ class ISNS20:
             self.cs.value(1)
 
             if len(data) == 2:
-                raw = ((data[0] & 0x0F) << 8) | data[1]
-                raw = raw & 0xFFF
+                raw = ((data[0] << 8) | data[1]) & 0xFFF
                 return raw
 
             return None
 
-        except Exception as e:
-            print(f"[ISNS20] Read error: {e}")
-            return None
-
-        try:
-            self.cs.value(0)
-            time.sleep_us(1)
-
-            data = self.spi.read(2)
-
-            time.sleep_us(1)
-            self.cs.value(1)
-
-            if len(data) == 2:
-                raw = ((data[0] & 0x0F) << 8) | data[1]
-                raw = raw & 0xFFF
-                print(
-                    f"[ISNS20] Raw ADC: {raw} = {raw * 3.3 / 4095:.3f}V, bytes: {data[0]:02x} {data[1]:02x}"
-                )
-                return raw
-
-            return None
-
-        except Exception as e:
-            print(f"[ISNS20] Read error: {e}")
-            return None
-
-        try:
-            self.cs.value(0)
-            time.sleep_us(2)
-
-            self.spi.write(b"\x00")
-            data = self.spi.read(2)
-
-            time.sleep_us(2)
-            self.cs.value(1)
-
-            if len(data) == 2:
-                raw = (data[1] << 8) | data[0]
-                raw = raw >> 4
-                raw = raw & 0xFFF
-                print(
-                    f"[ISNS20] Raw ADC: {raw} = {raw * 3.3 / 4095:.3f}V, bytes: {data[0]:02x} {data[1]:02x}"
-                )
-                return raw
-
-            return None
-
-        except Exception as e:
-            print(f"[ISNS20] Read error: {e}")
-            return None
-
-        try:
-            self.cs.value(0)
-            time.sleep_us(2)
-
-            data = self.spi.read(2)
-
-            time.sleep_us(2)
-            self.cs.value(1)
-
-            if len(data) == 2:
-                raw = (data[0] << 8) | data[1]
-                raw = raw >> 4
-                raw = raw & 0xFFF
-                print(
-                    f"[ISNS20] Raw ADC: {raw} = {raw * 3.3 / 4095:.3f}V, bytes: {data[0]:02x} {data[1]:02x}"
-                )
-                return raw
-
-            return None
-
-        except Exception as e:
-            print(f"[ISNS20] Read error: {e}")
+        except Exception:
             return None
 
     def read_current(self) -> float | None:
@@ -172,36 +98,15 @@ class ISNS20:
             voltage = (avg_raw / 4095.0) * 3.3
 
             sensitivity = 0.066
-            offset_voltage = 1.65
+            offset = 1.65
 
-            current = (voltage - offset_voltage) / sensitivity
+            current = (voltage - offset) / sensitivity
             current = round(current, 1)
 
             self.last_value = current
             return current
 
-        except Exception as e:
-            print(f"[ISNS20] Calc error: {e}")
-            return self.last_value
-
-        try:
-            voltage = (raw / 4095.0) * 3.3
-
-            sensitivity = 0.066
-            offset_voltage = 1.65
-
-            current = (voltage - offset_voltage) / sensitivity
-            current = round(current, 1)
-
-            print(
-                f"[ISNS20] Raw: {raw}, Voltage: {voltage:.3f}V, Current: {current:.2f}A"
-            )
-
-            self.last_value = current
-            return current
-
-        except Exception as e:
-            print(f"[ISNS20] Calc error: {e}")
+        except Exception:
             return self.last_value
 
     def get_last_value(self) -> float | None:
