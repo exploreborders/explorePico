@@ -6,8 +6,7 @@ Configuration for Pico 2W MQTT Client
 MQTT_SSL = True  # Enable SSL/TLS
 
 # DS18B20 Configuration
-DS18B20_PIN = 22  # GPIO pin for DS18B20 temperature sensor
-DS18B20_PIN_2 = 21  # GPIO pin for second DS18B20 (water temp)
+DS18B20_PIN = 22  # GPIO pin for DS18B20 temperature sensors (supports multiple)
 
 # ISNS20 Current Sensor Configuration
 ISNS20_CS_PIN = 8  # GPIO pin for ISNS20 chip select
@@ -60,9 +59,6 @@ def validate_config() -> bool:
 
     if not isinstance(DS18B20_PIN, int) or DS18B20_PIN < 0 or DS18B20_PIN > 28:
         errors.append("DS18B20_PIN must be 0-22 or 26-28 (23-25, 29 reserved)")
-
-    if not isinstance(DS18B20_PIN_2, int) or DS18B20_PIN_2 < 0 or DS18B20_PIN_2 > 28:
-        errors.append("DS18B20_PIN_2 must be 0-22 or 26-28 (23-25, 29 reserved)")
 
     if not isinstance(ISNS20_CS_PIN, int) or ISNS20_CS_PIN < 0 or ISNS20_CS_PIN > 28:
         errors.append("ISNS20_CS_PIN must be 0-22 or 26-28 (23-25, 29 reserved)")

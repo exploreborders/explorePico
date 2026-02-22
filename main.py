@@ -20,7 +20,6 @@ from config import (
     MQTT_PASSWORD,
     MQTT_SSL,
     DS18B20_PIN,
-    DS18B20_PIN_2,
     ISNS20_CS_PIN,
     ISNS20_SPI_PORT,
     TEMP_UPDATE_INTERVAL_MS,
@@ -58,10 +57,7 @@ led.off()
 temp_sensor = machine.ADC(4)
 wlan = network.WLAN(network.STA_IF)
 
-room_sensor = DS18B20Manager(DS18B20(DS18B20_PIN), "DS18B20", SENSOR_RETRY_INTERVAL_MS)
-water_sensor = DS18B20Manager(
-    DS18B20(DS18B20_PIN_2), "DS18B20-2", SENSOR_RETRY_INTERVAL_MS
-)
+temp_sensors = DS18B20Manager(DS18B20(DS18B20_PIN), "DS18B20", SENSOR_RETRY_INTERVAL_MS)
 current_sensor = ISNS20Manager(
     ISNS20(ISNS20_CS_PIN, ISNS20_SPI_PORT), "ISNS20", SENSOR_RETRY_INTERVAL_MS
 )
@@ -113,8 +109,7 @@ def log(tag: str, message: str) -> None:
     print(f"[{tag}] {message}")
 
 
-room_sensor.set_logger(log)
-water_sensor.set_logger(log)
+temp_sensors.set_logger(log)
 current_sensor.set_logger(log)
 
 
@@ -263,20 +258,28 @@ def publish_temperature() -> None:
 
 
 def publish_room_temperature() -> None:
-    """Read and publish room temperature from DS18B20."""
-    temp = room_sensor.read(TEMP_CONVERSION_TIME_MS)
-    if temp is not None:
-        mqtt_publish(TOPIC_ROOM_TEMP_STATE, str(temp))
-    elif room_sensor.ever_connected:
+    """Read and publish room temperature from DS18B20 (first sensor)."""
+    temps = temp_sensors.read(TEMP_CONVERSION_TIME_MS)
+    if temps is not None and len(temps) > 0:
+        temp = temps[0]
+        if temp is not None:
+            mqtt_publish(TOPIC_ROOM_TEMP_STATE, str(temp))
+        elif temp_sensors.ever_connected:
+            mqtt_publish(TOPIC_ROOM_TEMP_STATE, "unavailable")
+    elif temp_sensors.ever_connected:
         mqtt_publish(TOPIC_ROOM_TEMP_STATE, "unavailable")
 
 
 def publish_water_temperature() -> None:
-    """Read and publish water temperature from second DS18B20."""
-    temp = water_sensor.read(TEMP_CONVERSION_TIME_MS)
-    if temp is not None:
-        mqtt_publish(TOPIC_WATER_TEMP_STATE, str(temp))
-    elif water_sensor.ever_connected:
+    """Read and publish water temperature from DS18B20 (second sensor)."""
+    temps = temp_sensors.read(TEMP_CONVERSION_TIME_MS)
+    if temps is not None and len(temps) > 1:
+        temp = temps[1]
+        if temp is not None:
+            mqtt_publish(TOPIC_WATER_TEMP_STATE, str(temp))
+        elif temp_sensors.ever_connected:
+            mqtt_publish(TOPIC_WATER_TEMP_STATE, "unavailable")
+    elif temp_sensors.ever_connected:
         mqtt_publish(TOPIC_WATER_TEMP_STATE, "unavailable")
 
 
