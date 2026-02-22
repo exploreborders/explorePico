@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-MicroPython project for Raspberry Pi Pico 2W integrating with Home Assistant via MQTT. Reads DS18B20 temperature sensors and Pmod ISNS20 current sensor.
+MicroPython project for Raspberry Pi Pico 2W integrating with Home Assistant via MQTT. Reads DS18B20 temperature sensors (multiple on single GPIO) and Pmod ISNS20 current sensor.
 
 **Tech Stack:** MicroPython, Raspberry Pi Pico 2W (RP2350), umqtt.simple, DS18B20, Pmod ISNS20
 
@@ -78,6 +78,7 @@ from sensors import DS18B20, DS18B20Manager, ISNS20, ISNS20Manager
 # Good
 def read_temperature() -> float:
 def read_sensor() -> float | None:
+def read_all_sensors() -> list[float | None]:
 
 # Avoid
 def read_sensor() -> Optional[float]:
@@ -148,11 +149,20 @@ while True:
     reconnect_count = 0
 ```
 
+### Multiple Sensors on Single GPIO
+DS18B20Manager returns a list of temperatures (one per sensor):
+```python
+temps = temp_sensors.read(TEMP_CONVERSION_TIME_MS)
+if temps and len(temps) > 0:
+    room_temp = temps[0]  # First sensor found
+    water_temp = temps[1] if len(temps) > 1 else None  # Second sensor
+```
+
 ## Adding New Features
 
 ### Adding a New Sensor
 1. Add GPIO pin to `config.py`
-2. Create sensor in `main.py`:
+2. Create sensor manager in `main.py`:
    ```python
    new_sensor = Manager(Sensor(PIN), "Name", RETRY_INTERVAL_MS)
    new_sensor.set_logger(log)
@@ -160,6 +170,19 @@ while True:
 3. Add MQTT topics (TOPIC_X_STATE, TOPIC_X_CONFIG)
 4. Add getter function and publish function
 5. Add to `publish_discovery()` and main loop
+
+### Adding Second DS18B20 Sensor (Same GPIO)
+1. Wire sensor in parallel to existing DS18B20 data line
+2. First sensor found = index 0, second = index 1
+3. No code changes needed - already supports multiple sensors
+
+## Config Validation
+
+The project includes runtime config validation via `validate_config()` in `config.py`:
+- Validates WiFi/MQTT credentials are non-empty strings
+- Validates GPIO pins are in valid range (0-22, 26-28)
+- Validates SPI port is 0 or 1
+- Raises `ValueError` with detailed messages on validation failure
 
 ## Important Notes
 
@@ -169,10 +192,17 @@ while True:
 ### MicroPython Differences
 - Use `ujson` not `json`
 - Use `time.ticks_ms()` not `time.time()`
+- Use `time.ticks_diff()` for timing calculations
 - No `math` module (use `u math`)
 
 ### Hardware
 - Watchdog max ~8388ms
-- GPIO 0-21 available
-- DS18B20: 750ms conversion time (non-blocking)
+- GPIO 0-22, 26-28 available (23-25, 29 reserved)
+- DS18B20: 750ms conversion time (non-blocking), supports multiple sensors on single GPIO
 - ISNS20: SPI0 on GP2/3/4, CS on GP8
+
+### Temperature Sensors Assignment
+- Multiple DS18B20 sensors on same GPIO are auto-assigned by discovery order
+- First sensor found = room temperature (index 0)
+- Second sensor found = water temperature (index 1)
+- If only one sensor connected, water_temp will show "unavailable"

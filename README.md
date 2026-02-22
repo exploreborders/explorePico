@@ -4,7 +4,7 @@ MicroPython project for Raspberry Pi Pico 2W that integrates with Home Assistant
 
 ## Features
 
-- **Temperature Sensing**: Two DS18B20 temperature sensors (room + water)
+- **Temperature Sensing**: Two DS18B20 temperature sensors on single GPIO (room + water)
 - **Current Sensing**: Pmod ISNS20 20A current sensor
 - **Home Assistant Integration**: Automatic MQTT discovery for all sensors
 - **LED Control**: Control Pico LED via MQTT
@@ -15,18 +15,39 @@ MicroPython project for Raspberry Pi Pico 2W that integrates with Home Assistant
 ## Hardware
 
 - Raspberry Pi Pico 2W (RP2350)
-- 2x DS18B20 temperature sensors
+- 2x DS18B20 temperature sensors (waterproof probes recommended)
 - 1x Pmod ISNS20 20A current sensor
+- 1x 4.7kΩ resistor (for DS18B20 data line pull-up)
 
 ### GPIO Configuration
 
 | Sensor | GPIO | Notes |
 |--------|------|-------|
-| DS18B20 (Room) | GP22 | Temperature |
-| DS18B20 (Water) | GP21 | Temperature |
+| DS18B20 (both) | GP22 | 1-Wire bus, supports multiple sensors |
 | ISNS20 CS | GP8 | SPI Chip Select |
 | ISNS20 SCK | GP2 | SPI Clock |
 | ISNS20 MISO | GP4 | SPI Data |
+
+### DS18B20 Wiring (Daisy-Chained)
+
+Connect both DS18B20 sensors to the same GPIO using a single pull-up resistor:
+
+```
+                    4.7kΩ
+ Pico GP22 ────────┬───────┬─────── DQ (yellow/white)
+                    │       │
+                   GND    GND
+                   │       │
+                   VDD    VDD
+                  (red)  (red)
+                  
+            3V3 ────────┴───────┘
+```
+
+All sensors share:
+- **Data (DQ)**: GP22
+- **VCC**: 3V3
+- **GND**: GND
 
 ## Installation
 
@@ -111,8 +132,9 @@ The device is automatically discovered via MQTT discovery. After running, you sh
 
 ### Sensor Not Found
 - Check wiring and pull-up resistor (4.7kΩ for DS18B20)
-- Verify GPIO pins in config.py
+- Verify GPIO pin in config.py (GP22)
 - Check Serial output for error messages
+- Ensure sensors have unique ROM codes (DS18B20 has built-in unique IDs)
 
 ### MQTT Connection Failed
 - Verify broker address and port
@@ -123,6 +145,11 @@ The device is automatically discovered via MQTT discovery. After running, you sh
 - Ensure correct SPI wiring (SCK, MISO, CS)
 - Check 3.3V power connection
 - Verify no jumpers for 120Hz bandwidth (recommended)
+
+### Temperature Sensors Swap
+- First sensor found = room temp
+- Second sensor found = water temp
+- Sensors are auto-assigned by discovery order
 
 ## Project Structure
 
