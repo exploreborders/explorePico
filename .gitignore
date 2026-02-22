@@ -1,0 +1,7 @@
+secrets.py
+.pytest_cache/
+__pycache__/
+*.pyc
+*.pyo
+.micropico/
+.ruff_cache/
