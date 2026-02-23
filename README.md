@@ -26,7 +26,8 @@ MicroPython project for Raspberry Pi Pico 2W that integrates with Home Assistant
 | DS18B20 (both) | GP22 | 1-Wire bus, supports multiple sensors |
 | ISNS20 CS | GP8 | SPI Chip Select |
 | ISNS20 SCK | GP2 | SPI Clock |
-| ISNS20 MISO | GP4 | SPI Data |
+| ISNS20 MOSI | GP3 | SPI Data Out |
+| ISNS20 MISO | GP4 | SPI Data In |
 
 ### DS18B20 Wiring (Daisy-Chained)
 
@@ -106,17 +107,17 @@ main.main()
 
 | Topic | Description |
 |-------|-------------|
-| `pico/temperature` | Internal temperature (°C) |
-| `pico/room_temp` | Room temperature (°C) |
-| `pico/water_temp` | Water temperature (°C) |
-| `pico/current` | Current measurement (A) |
-| `pico/led/state` | LED state (ON/OFF) |
+| `homeassistant/sensor/pico/cpu_temp` | Internal temperature (°C) |
+| `homeassistant/sensor/pico/room_temp` | Room temperature (°C) |
+| `homeassistant/sensor/pico/water_temp` | Water temperature (°C) |
+| `homeassistant/sensor/pico/current` | Current measurement (A) |
+| `homeassistant/switch/pico/led` | LED state (ON/OFF) |
 
 ### Control Topics
 
 | Topic | Payload | Description |
 |-------|---------|-------------|
-| `pico/led/set` | `ON` / `OFF` | Control LED |
+| `homeassistant/switch/pico/led/set` | `ON` / `OFF` | Control LED |
 
 ## Home Assistant
 
