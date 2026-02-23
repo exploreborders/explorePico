@@ -4,6 +4,8 @@
 
 MicroPython project for Raspberry Pi Pico 2W with cellular connectivity (SIM7600G-H), integrating with Home Assistant via MQTT. Monitors vehicle systems and controls relays.
 
+**Dual Connectivity:** Primary cellular (SIM7600) with WiFi fallback when cellular unavailable.
+
 ## Hardware Configuration
 
 ### Pin Assignment
@@ -56,6 +58,65 @@ Example:
 - 0A: ADC = 2048, Voltage = 1.65V
 - 10A: ADC ~ 2500, Voltage ~ 2.31V
 - -10A: ADC ~ 1596, Voltage ~ 0.99V
+```
+
+## Dual Connectivity Architecture
+
+### Overview
+
+| Connection | When Used | Broker | HA Available? |
+|------------|-----------|--------|---------------|
+| **Cellular** (primary) | Normal operation | explorehome.duckdns.org | ✅ Yes |
+| **WiFi** (fallback) | No cellular | iPhone local broker (Fast MQTT Broker Mobile) | ❌ No - local only |
+
+### Connection Logic
+
+```
+1. Start: Try cellular first (SIM7600)
+2. If cellular fails → switch to WiFi (phone hotspot)
+3. Periodic check (every 5 min): try cellular again
+4. If cellular returns → switch back to cellular
+```
+
+### MQTT Client IDs
+- `pico_cellular` - when on cellular
+- `pico_wifi` - when on WiFi fallback
+
+### State Re-Publish on Connection Change
+
+When switching between cellular and WiFi:
+1. Connect to new broker
+2. Re-publish ALL discovery configs (retain = True)
+3. Re-publish ALL current sensor states (retain = True)
+4. Subscribe to control topics
+
+This ensures new broker has all retained messages and current values.
+
+### WiFi Fallback Details
+
+**Use case:** When no mobile internet available
+- Pico connects to iPhone WiFi hotspot
+- iPhone runs "Fast MQTT Broker Mobile" app ($5.99)
+- Local broker port: 1883 (same as home broker)
+- Control via MQTT client app on iPhone (MQTTAnalyzer, EasyMQTT, etc.)
+
+**Note:** Home Assistant NOT accessible during WiFi fallback - local control only.
+
+### Secrets Configuration
+
+```python
+# Cellular (primary)
+CELLULAR_APN = "o2.de"
+MQTT_BROKER = "explorehome.duckdns.org"
+MQTT_PORT = 1883
+MQTT_USER = "your_mqtt_user"
+MQTT_PASSWORD = "your_mqtt_password"
+
+# WiFi Fallback (iPhone hotspot)
+WIFI_SSID = "YourPhoneHotspot"
+WIFI_PASSWORD = "hotspotpassword"
+WIFI_MQTT_BROKER = "iPhone_IP_address"  # e.g., "172.20.10.1"
+WIFI_MQTT_PORT = 1883
 ```
 
 ## MQTT Configuration
@@ -241,16 +302,17 @@ modem/                        # NEW
 ## Implementation Phases
 
 ### Phase 1: Core Infrastructure
-- [ ] Set up project structure
-- [ ] Create config.py with pin definitions
-- [ ] Create secrets.py template
-- [ ] Set up logging system
+- [x] Set up project structure
+- [x] Create config.py with pin definitions
+- [x] Create secrets.py template
+- [x] Set up logging system
 
 ### Phase 2: SIM7600 Integration
 - [ ] Create modem/sim7600.py driver
 - [ ] Implement AT command handling
 - [ ] Implement MQTT over AT commands
 - [ ] Test cellular connectivity
+- [ ] Use cellular as primary connection
 
 ### Phase 3: GPS
 - [ ] Implement NMEA parsing
@@ -287,21 +349,36 @@ modem/                        # NEW
 - [ ] Add availability tracking
 - [ ] Test all sensors and switches in HA
 
-### Phase 10: Testing & Optimization
+### Phase 10: WiFi Fallback (Dual Connectivity)
+- [ ] Add WiFi credentials to config.py and secrets.py
+- [ ] Implement WiFi connection function
+- [ ] Implement cellular-first, WiFi-fallback logic
+- [ ] Add periodic cellular check (every 5 min)
+- [ ] Implement state re-publish on connection switch
+- [ ] Track connection type (cellular/wifi)
+- [ ] Use different client IDs per connection
+
+### Phase 11: Testing & Optimization
 - [ ] Full system test
 - [ ] Connection reliability testing
 - [ ] Power consumption optimization
 
 ## Testing Checklist
 
-- [ ] SIM7600 connects to network
-- [ ] MQTT connection established
+- [x] WiFi connects to home network
+- [x] MQTT connection established to home broker
+- [ ] SIM7600 connects to cellular network
+- [ ] Cellular MQTT connection established
 - [ ] All sensors read correctly
 - [ ] GPS returns valid coordinates
 - [ ] Relays respond to MQTT commands
 - [ ] Fan auto-control works
 - [ ] HA discovers all entities
 - [ ] System handles reconnection
+- [ ] WiFi fallback activates when cellular fails
+- [ ] Connection switches back to cellular when available
+- [ ] States re-published on connection change
+- [ ] Local iPhone broker works for WiFi fallback
 
 ## Notes
 
@@ -309,6 +386,13 @@ modem/                        # NEW
 - APN: `o2.de`
 - Username: (empty)
 - Password: (empty)
+
+### iPhone Local MQTT Broker
+- App: **Fast MQTT Broker Mobile** ($5.99)
+- App Store: https://apps.apple.com/us/app/fast-mqtt-broker-mobile/id6751751797
+- Port: 1883 (default)
+- Use same credentials as home broker
+- Control via MQTT client app (MQTTAnalyzer, EasyMQTT)
 
 ### Water Level Sensor
 - Empty: ~190Ω
