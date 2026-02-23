@@ -15,9 +15,9 @@ secondTest/
 ├── secrets.py        # WiFi/MQTT credentials (NOT committed)
 ├── sensors/
 │   ├── __init__.py
-│   ├── ds18b20.py   # DS18B20 driver + DS18B20Manager
-│   └── isns20.py    # ISNS20 current sensor driver
-└── .vscode/         # VS Code settings for Pico
+│   ├── ds18b20.py    # DS18B20 driver + DS18B20Manager
+│   └── isns20.py     # ISNS20 current sensor driver
+└── .vscode/          # VS Code settings for Pico
 ```
 
 ## Build/Deploy Commands
@@ -31,21 +31,16 @@ micropico connect
 %send -r sensors/
 ```
 
-### Linting & Code Quality
+### Linting
 ```bash
-# Install ruff
 pip install ruff
-
-# Check issues
-ruff check .
-
-# Auto-fix
-ruff check . --fix
+ruff check .           # Check all issues
+ruff check . --fix     # Auto-fix
+ruff check main.py     # Single file
 ```
 
 ### Run Application
 ```python
-# In Pico REPL
 import main
 main.main()
 ```
@@ -71,21 +66,15 @@ from sensors import DS18B20, DS18B20Manager, ISNS20, ISNS20Manager
 - **Line length:** Max 100 characters
 - **Indentation:** 4 spaces (no tabs)
 - **Blank lines:** 2 between top-level definitions, 1 between functions
-- **No trailing whitespace**
 
 ### Type Hints (Python 3.10+ union syntax)
 ```python
-# Good
 def read_temperature() -> float:
 def read_sensor() -> float | None:
 def read_all_sensors() -> list[float | None]:
-
-# Avoid
-def read_sensor() -> Optional[float]:
 ```
 
 ### Naming Conventions
-
 | Type | Convention | Example |
 |------|------------|---------|
 | Functions | snake_case | `connect_wifi()` |
@@ -94,29 +83,11 @@ def read_sensor() -> Optional[float]:
 | Classes | PascalCase | `DS18B20Manager` |
 | Private vars | _snake_case | `_last_values` |
 
-### Error Handling
+### Error Handling & Globals
 - Use try/except for I/O (network, MQTT, sensor reads)
 - Log errors with `log()` function
 - Never swallow exceptions silently
-
-```python
-def on_message(topic: bytes, msg: bytes) -> None:
-    try:
-        topic_str = topic.decode()
-        msg_str = msg.decode().strip().upper()
-    except Exception as e:
-        log("ERROR", f"Message handling failed: {e}")
-```
-
-### Global Variables
-Declare with `global` at function start:
-```python
-mqtt_client = None
-
-def some_function():
-    global mqtt_client
-    mqtt_client = create_client()
-```
+- Declare globals at function start
 
 ## Key Patterns
 
@@ -132,10 +103,9 @@ def mqtt_publish(topic: str, value: str, retain: bool = True) -> bool:
     return False
 ```
 
-### Sensor Manager Pattern
+### Sensor Manager & Reconnection
 Use `*Manager` classes for sensor handling with auto-init, retry logic, hot-swap detection.
 
-### Reconnection with Backoff
 ```python
 reconnect_count = 0
 while True:
@@ -149,18 +119,16 @@ while True:
     reconnect_count = 0
 ```
 
-### Multiple Sensors on Single GPIO
-DS18B20Manager returns a list of temperatures (one per sensor):
+### Multiple DS18B20 Sensors
 ```python
 temps = temp_sensors.read(TEMP_CONVERSION_TIME_MS)
 if temps and len(temps) > 0:
-    room_temp = temps[0]  # First sensor found
-    water_temp = temps[1] if len(temps) > 1 else None  # Second sensor
+    room_temp = temps[0]   # First sensor found
+    water_temp = temps[1] if len(temps) > 1 else None
 ```
 
 ## Adding New Features
 
-### Adding a New Sensor
 1. Add GPIO pin to `config.py`
 2. Create sensor manager in `main.py`:
    ```python
@@ -171,16 +139,11 @@ if temps and len(temps) > 0:
 4. Add getter function and publish function
 5. Add to `publish_discovery()` and main loop
 
-### Adding Second DS18B20 Sensor (Same GPIO)
-1. Wire sensor in parallel to existing DS18B20 data line
-2. First sensor found = index 0, second = index 1
-3. No code changes needed - already supports multiple sensors
-
 ## Config Validation
 
-The project includes runtime config validation via `validate_config()` in `config.py`:
+Runtime config validation via `validate_config()` in `config.py`:
 - Validates WiFi/MQTT credentials are non-empty strings
-- Validates GPIO pins are in valid range (0-22, 26-28)
+- Validates GPIO pins in valid range (0-22, 26-28)
 - Validates SPI port is 0 or 1
 - Raises `ValueError` with detailed messages on validation failure
 
@@ -193,16 +156,15 @@ The project includes runtime config validation via `validate_config()` in `confi
 - Use `ujson` not `json`
 - Use `time.ticks_ms()` not `time.time()`
 - Use `time.ticks_diff()` for timing calculations
-- No `math` module (use `u math`)
 
 ### Hardware
 - Watchdog max ~8388ms
 - GPIO 0-22, 26-28 available (23-25, 29 reserved)
-- DS18B20: 750ms conversion time (non-blocking), supports multiple sensors on single GPIO
+- DS18B20: 750ms conversion time, supports multiple sensors on single GPIO
 - ISNS20: SPI0 on GP2/3/4, CS on GP8
 
 ### Temperature Sensors Assignment
 - Multiple DS18B20 sensors on same GPIO are auto-assigned by discovery order
 - First sensor found = room temperature (index 0)
 - Second sensor found = water temperature (index 1)
-- If only one sensor connected, water_temp will show "unavailable"
+- If only one sensor connected, water_temp shows "unavailable"

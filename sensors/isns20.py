@@ -101,7 +101,7 @@ class ISNS20:
             offset = 1.65
 
             current = (voltage - offset) / sensitivity
-            current = round(current, 1)
+            current = round(current, 2)
 
             self.last_value = current
             return current

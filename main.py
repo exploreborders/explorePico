@@ -36,21 +36,21 @@ micropython.alloc_emergency_exception_buf(200)
 uid = ubinascii.hexlify(machine.unique_id()).decode()
 MQTT_CLIENT_ID = f"pico_{uid}"
 
-TOPIC_LED_COMMAND = "pico/led/set"
-TOPIC_LED_STATE = "pico/led/state"
-TOPIC_LED_CONFIG = "homeassistant/switch/pico_led/config"
+TOPIC_LED_COMMAND = "homeassistant/switch/pico/led/set"
+TOPIC_LED_STATE = "homeassistant/switch/pico/led/state"
+TOPIC_LED_CONFIG = "homeassistant/switch/pico/led/config"
 
-TOPIC_TEMP_STATE = "pico/temperature"
-TOPIC_TEMP_CONFIG = "homeassistant/sensor/pico_temp/config"
+TOPIC_TEMP_STATE = "homeassistant/sensor/pico/cpu_temp"
+TOPIC_TEMP_CONFIG = "homeassistant/sensor/pico/cpu_temp/config"
 
-TOPIC_ROOM_TEMP_STATE = "pico/room_temp"
-TOPIC_ROOM_TEMP_CONFIG = "homeassistant/sensor/pico_room_temp/config"
+TOPIC_ROOM_TEMP_STATE = "homeassistant/sensor/pico/room_temp"
+TOPIC_ROOM_TEMP_CONFIG = "homeassistant/sensor/pico/room_temp/config"
 
-TOPIC_WATER_TEMP_STATE = "pico/water_temp"
-TOPIC_WATER_TEMP_CONFIG = "homeassistant/sensor/pico_water_temp/config"
+TOPIC_WATER_TEMP_STATE = "homeassistant/sensor/pico/water_temp"
+TOPIC_WATER_TEMP_CONFIG = "homeassistant/sensor/pico/water_temp/config"
 
-TOPIC_CURRENT_STATE = "pico/current"
-TOPIC_CURRENT_CONFIG = "homeassistant/sensor/pico_current/config"
+TOPIC_CURRENT_STATE = "homeassistant/sensor/pico/current"
+TOPIC_CURRENT_CONFIG = "homeassistant/sensor/pico/current/config"
 
 led = machine.Pin("LED", machine.Pin.OUT)
 led.off()
