@@ -18,6 +18,13 @@ RECONNECT_DELAY_S = 5
 TEMP_CONVERSION_TIME_MS = 750  # DS18B20 conversion time
 SENSOR_RETRY_INTERVAL_MS = 60000  # Retry failed sensor init every 60s
 
+# SD Card Updater Configuration
+SD_SCK_PIN = 14
+SD_MOSI_PIN = 15
+SD_MISO_PIN = 12
+SD_CS_PIN = 13
+UPDATE_BUTTON_PIN = 10
+
 # Try to import from secrets.py, fallback to this file for development
 try:
     from secrets import (
@@ -65,6 +72,25 @@ def validate_config() -> bool:
 
     if ISNS20_SPI_PORT not in (0, 1):
         errors.append("ISNS20_SPI_PORT must be 0 or 1")
+
+    if not isinstance(SD_SCK_PIN, int) or SD_SCK_PIN < 0 or SD_SCK_PIN > 28:
+        errors.append("SD_SCK_PIN must be 0-22 or 26-28")
+
+    if not isinstance(SD_MOSI_PIN, int) or SD_MOSI_PIN < 0 or SD_MOSI_PIN > 28:
+        errors.append("SD_MOSI_PIN must be 0-22 or 26-28")
+
+    if not isinstance(SD_MISO_PIN, int) or SD_MISO_PIN < 0 or SD_MISO_PIN > 28:
+        errors.append("SD_MISO_PIN must be 0-22 or 26-28")
+
+    if not isinstance(SD_CS_PIN, int) or SD_CS_PIN < 0 or SD_CS_PIN > 28:
+        errors.append("SD_CS_PIN must be 0-22 or 26-28")
+
+    if (
+        not isinstance(UPDATE_BUTTON_PIN, int)
+        or UPDATE_BUTTON_PIN < 0
+        or UPDATE_BUTTON_PIN > 28
+    ):
+        errors.append("UPDATE_BUTTON_PIN must be 0-22 or 26-28")
 
     if errors:
         raise ValueError(
