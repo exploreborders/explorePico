@@ -8,6 +8,8 @@ import sdcard
 import uos
 import time
 
+from blink import blink_pattern
+
 SD_SCK = 14
 SD_MOSI = 15
 SD_MISO = 12
@@ -24,15 +26,6 @@ uos_mounted = False
 def log(msg: str) -> None:
     """Simple logger."""
     print(f"[SDUPD] {msg}")
-
-
-def blink_led(pattern: str, delay: float = 0.15) -> None:
-    """Blink LED for feedback."""
-    led = machine.Pin("LED", machine.Pin.OUT)
-    for char in pattern:
-        led.value(1 if char == "1" else 0)
-        time.sleep(delay)
-    led.value(0)
 
 
 def init_sd() -> bool:
@@ -118,13 +111,13 @@ def detect_rollback_trigger() -> bool:
 def perform_rollback() -> bool:
     """Restore from backup. Returns True on success."""
     log("Rolling back...")
-    blink_led("010")
+    blink_pattern("010")
 
     try:
         files = uos.listdir("/backup")
         if not files:
             log("No backup found")
-            blink_led("1")
+            blink_pattern("1")
             return False
 
         for f in files:
@@ -144,12 +137,12 @@ def perform_rollback() -> bool:
         cleanup_backup()
 
         log("Rollback complete")
-        blink_led("1010")
+        blink_pattern("1010")
         return True
 
     except Exception as e:
         log(f"Rollback failed: {e}")
-        blink_led("000")
+        blink_pattern("000")
         return False
 
 
@@ -295,12 +288,12 @@ def cleanup_backup() -> None:
 
 def apply_update() -> bool:
     """Apply update from SD card. Returns True on success."""
-    blink_led("11")
+    blink_pattern("11")
 
     new_version = read_update_version()
     if not new_version:
         log("No version found on SD")
-        blink_led("10")
+        blink_pattern("10")
         return False
 
     current = read_version() or "0.0"
@@ -308,13 +301,13 @@ def apply_update() -> bool:
 
     if new_version <= current:
         log("No update needed")
-        blink_led("10")
+        blink_pattern("10")
         return False
 
     files = list_update_files()
     if not files:
         log("No update files found")
-        blink_led("10")
+        blink_pattern("10")
         return False
 
     update_files = [f for f in files if f.endswith(".py") or f == "version.txt"]
@@ -323,7 +316,7 @@ def apply_update() -> bool:
 
     if not create_backup():
         log("Backup failed, aborting")
-        blink_led("000")
+        blink_pattern("000")
         return False
 
     success = True
@@ -350,13 +343,13 @@ def apply_update() -> bool:
         write_version(new_version)
         cleanup_backup()
         log(f"Update to {new_version} complete!")
-        blink_led("111")
+        blink_pattern("111")
         return True
     else:
         log("Update failed, restoring backup")
         restore_backup()
         cleanup_backup()
-        blink_led("000")
+        blink_pattern("000")
         return False
 
 
@@ -375,10 +368,10 @@ def check_and_apply_update() -> bool:
         return False
 
     log("Update button pressed!")
-    blink_led("1")
+    blink_pattern("1")
 
     if not init_sd():
-        blink_led("000")
+        blink_pattern("000")
         deinit_sd()
         return False
 

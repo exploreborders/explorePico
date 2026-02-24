@@ -11,6 +11,8 @@ import ujson
 import ubinascii
 import micropython
 
+from blink import blink_pattern
+
 from config import (
     WIFI_SSID,
     WIFI_PASSWORD,
@@ -80,28 +82,6 @@ def mqtt_publish(topic: str, value: str, retain: bool = True) -> bool:
         _last_mqtt_values[key] = value
         return True
     return False
-
-
-def blink(times: int, delay: float = 0.15, pause: float = 0.3) -> None:
-    """Visual feedback via onboard LED."""
-    for i in range(times):
-        led.on()
-        time.sleep(delay)
-        led.off()
-        if i < times - 1:
-            time.sleep(pause)
-
-
-def blink_pattern(pattern: str) -> None:
-    """Blink LED according to pattern string (e.g., "1010" = on-off-on-off)."""
-    for char in pattern:
-        if char == "1":
-            led.on()
-        else:
-            led.off()
-        time.sleep(0.15)
-    led.off()
-    time.sleep(0.3)
 
 
 def log(tag: str, message: str) -> None:
