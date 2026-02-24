@@ -1,6 +1,6 @@
-# Pico 2W MQTT Client
+# Pico 2W MQTT Client with SD Card Updater
 
-MicroPython project for Raspberry Pi Pico 2W that integrates with Home Assistant via MQTT. Reads DS18B20 temperature sensors and Pmod ISNS20 current sensor.
+MicroPython project for Raspberry Pi Pico 2W that integrates with Home Assistant via MQTT. Reads DS18B20 temperature sensors and Pmod ISNS20 current sensor. Supports wireless code updates via SD card.
 
 ## Features
 
@@ -11,12 +11,16 @@ MicroPython project for Raspberry Pi Pico 2W that integrates with Home Assistant
 - **Internal Temperature**: RP2350 internal temperature sensor
 - **Auto-Reconnect**: WiFi and MQTT with exponential backoff
 - **Sensor Hot-Swap**: Automatic detection of connected/disconnected sensors
+- **SD Card Updates**: Update code via SD card without computer connection
+- **Rollback**: Restore previous version if update fails
 
 ## Hardware
 
 - Raspberry Pi Pico 2W (RP2350)
 - 2x DS18B20 temperature sensors (waterproof probes recommended)
 - 1x Pmod ISNS20 20A current sensor
+- 1x micro SD card module (SPI)
+- 1x push button (for update trigger)
 - 1x 4.7kΩ resistor (for DS18B20 data line pull-up)
 
 ### GPIO Configuration
@@ -28,6 +32,11 @@ MicroPython project for Raspberry Pi Pico 2W that integrates with Home Assistant
 | ISNS20 SCK | GP2 | SPI Clock |
 | ISNS20 MOSI | GP3 | SPI Data Out |
 | ISNS20 MISO | GP4 | SPI Data In |
+| SD Card MOSI | GP15 | SPI Data Out |
+| SD Card MISO | GP12 | SPI Data In |
+| SD Card SCK | GP14 | SPI Clock |
+| SD Card CS | GP13 | Chip Select |
+| Update Button | GP10 | Pulled HIGH internally |
 
 ### DS18B20 Wiring (Daisy-Chained)
 
@@ -38,17 +47,35 @@ Connect both DS18B20 sensors to the same GPIO using a single pull-up resistor:
  Pico GP22 ────────┬───────┬─────── DQ (yellow/white)
                     │       │
                    GND    GND
-                   │       │
+                    │       │
                    VDD    VDD
                   (red)  (red)
-                  
-            3V3 ────────┴───────┘
+                   
+           3V3 ────────┴───────┘
 ```
 
 All sensors share:
 - **Data (DQ)**: GP22
 - **VCC**: 3V3
 - **GND**: GND
+
+### SD Card Module Wiring
+
+| SD Module | Pico Pin |
+|-----------|----------|
+| VCC | 3V3 |
+| GND | GND |
+| MOSI | GP15 |
+| MISO | GP12 |
+| SCK | GP14 |
+| CS | GP13 |
+
+### Update Button Wiring
+
+| Button | Pico Pin |
+|--------|----------|
+| One leg | GP10 |
+| Other leg | GND |
 
 ## Installation
 
@@ -79,27 +106,104 @@ MQTT_PASSWORD = "mqtt_password"
 Using MicroPico (VS Code extension):
 ```bash
 micropico connect
+%send boot.py
+%send sd_updater.py
 %send main.py
 %send config.py
 %send secrets.py
 %send -r sensors/
 ```
 
-Or using ampy:
+Or using mpremote:
 ```bash
-ampy --port /dev/tty.usbmodem* put main.py
-ampy --port /dev/tty.usbmodem* put config.py
-ampy --port /dev/tty.usbmodem* put secrets.py
-ampy --port /dev/tty.usbmodem* put sensors/
+mpremote cp main.py :
+mpremote cp config.py :
+mpremote cp secrets.py :
+mpremote cp boot.py :
+mpremote cp sd_updater.py :
+mpremote cp -r sensors/ :
 ```
 
 ### 4. Run
 
-```python
-# In Pico REPL
-import main
-main.main()
-```
+The Pico will automatically run `boot.py` on power-up, which then runs `main.py`.
+
+## SD Card Code Updater
+
+### Overview
+
+The SD Card Updater allows you to update the Pico's code without connecting it to a computer. Simply insert an SD card with the new files and press the button at boot.
+
+### How It Works
+
+| Boot Event | Button Action | Result |
+|------------|---------------|--------|
+| Normal boot | No button press | Runs main.py normally |
+| Update | Single press at boot | Updates code from SD card |
+| Rollback | Double press at boot | Restores previous version |
+
+### LED Feedback Patterns
+
+| Pattern | Meaning |
+|---------|---------|
+| No blink | Normal boot, no action |
+| **Update** | |
+| "1" | Update triggered |
+| "11" | Reading SD card |
+| "10" | No update needed (same/older version) |
+| "111" | ✅ Update successful! |
+| "000" | ❌ Update failed |
+| **Rollback** | |
+| "010" | Rollback detected |
+| "1010" | ✅ Rollback successful! |
+| "000" | ❌ Rollback failed |
+| "1" | No backup found |
+
+### Updating Code
+
+1. **Prepare SD Card:**
+   Format the SD card as FAT32 and create this structure:
+   ```
+   / (SD card root)
+   └── update/
+       ├── version.txt    # Version number (e.g., "2.0")
+       ├── main.py        # New main.py (optional)
+       ├── config.py      # New config.py (optional)
+       ├── secrets.py     # New secrets.py (optional)
+       └── sensors/       # New sensor files (optional)
+   ```
+
+2. **Version Number:**
+   - The version in `version.txt` must be **higher** than the current version
+   - Current version is stored in `/.version` on the Pico
+   - Example: if current is "1.0", use "2.0" or "1.1"
+
+3. **Trigger Update:**
+   - Power off the Pico
+   - Insert the SD card with update files
+   - Hold the button on GP10
+   - While holding, power on the Pico
+   - Watch the LED for success/failure
+
+4. **Verify:**
+   - LED "111" = success, Pico will reboot with new code
+   - LED "000" = failed, Pico will boot with old code
+
+### Rolling Back
+
+If something goes wrong, you can restore the previous version:
+
+1. Power off the Pico
+2. Hold the button on GP10
+3. Press button **twice** within 2 seconds
+4. Watch the LED for "1010" (success) or "000" (failed)
+
+### Safety Features
+
+- **Manual trigger**: Button must be pressed at boot
+- **Version check**: Won't update if version is same or lower
+- **Backup**: Creates backup before updating
+- **Auto-rollback**: If update fails, automatically restores previous version
 
 ## MQTT Topics
 
@@ -152,18 +256,27 @@ The device is automatically discovered via MQTT discovery. After running, you sh
 - Second sensor found = water temp
 - Sensors are auto-assigned by discovery order
 
+### SD Card Updater Issues
+- Ensure SD card is formatted FAT32
+- Check SD card wiring (MOSI, MISO, SCK, CS)
+- Verify button is connected to GP10 and GND
+- Ensure version.txt contains higher version than current
+
 ## Project Structure
 
 ```
 secondTest/
-├── main.py           # Main application
-├── config.py        # Configuration
-├── secrets.py       # WiFi/MQTT credentials
+├── boot.py              # Entry point with SD update check
+├── sd_updater.py       # SD card code updater module
+├── main.py             # Main application
+├── config.py           # Configuration
+├── secrets.py          # WiFi/MQTT credentials
+├── version.txt         # Current version reference
 ├── sensors/
 │   ├── __init__.py
-│   ├── ds18b20.py  # Temperature sensor driver
-│   └── isns20.py   # Current sensor driver
-└── .vscode/        # VS Code settings
+│   ├── ds18b20.py      # Temperature sensor driver
+│   └── isns20.py        # Current sensor driver
+└── .vscode/            # VS Code settings
 ```
 
 ## License
