@@ -70,12 +70,14 @@ All sensors share:
 | SCK | GP14 |
 | CS | GP13 |
 
-### Update Button Wiring
+### Update Button Wiring (for Rollback)
 
 | Button | Pico Pin |
 |--------|----------|
 | One leg | GP10 |
 | Other leg | GND |
+
+The button is used for rollback (double-press). Update is automatic when SD card is inserted.
 
 ## Installation
 
@@ -108,6 +110,7 @@ Using MicroPico (VS Code extension):
 micropico connect
 %send boot.py
 %send sd_updater.py
+%send blink.py
 %send main.py
 %send config.py
 %send secrets.py
@@ -121,6 +124,7 @@ mpremote cp config.py :
 mpremote cp secrets.py :
 mpremote cp boot.py :
 mpremote cp sd_updater.py :
+mpremote cp blink.py :
 mpremote cp -r sensors/ :
 ```
 
@@ -132,24 +136,24 @@ The Pico will automatically run `boot.py` on power-up, which then runs `main.py`
 
 ### Overview
 
-The SD Card Updater allows you to update the Pico's code without connecting it to a computer. Simply insert an SD card with the new files and press the button at boot.
+The SD Card Updater automatically detects an SD card with valid update files at boot and updates the Pico's code. No computer connection needed!
 
 ### How It Works
 
-| Boot Event | Button Action | Result |
-|------------|---------------|--------|
-| Normal boot | No button press | Runs main.py normally |
-| Update | Single press at boot | Updates code from SD card |
-| Rollback | Double press at boot | Restores previous version |
+| Boot Event | Action | Result |
+|------------|--------|--------|
+| Normal boot | No SD card | Runs main.py normally |
+| Normal boot | SD card (no update) | Runs main.py normally |
+| Update | SD card with valid files | Auto-updates and reboots |
+| Rollback | Double press button | Restores previous version |
 
 ### LED Feedback Patterns
 
 | Pattern | Meaning |
 |---------|---------|
-| No blink | Normal boot, no action |
+| No blink | Normal boot, no SD card or no update |
 | **Update** | |
-| "1" | Update triggered |
-| "11" | Reading SD card |
+| "1" | Update found, starting |
 | "10" | No update needed (same/older version) |
 | "111" | ✅ Update successful! |
 | "000" | ❌ Update failed |
@@ -181,8 +185,7 @@ The SD Card Updater allows you to update the Pico's code without connecting it t
 3. **Trigger Update:**
    - Power off the Pico
    - Insert the SD card with update files
-   - Hold the button on GP10
-   - While holding, power on the Pico
+   - Power on the Pico
    - Watch the LED for success/failure
 
 4. **Verify:**
@@ -268,6 +271,7 @@ The device is automatically discovered via MQTT discovery. After running, you sh
 secondTest/
 ├── boot.py              # Entry point with SD update check
 ├── sd_updater.py       # SD card code updater module
+├── blink.py            # Shared LED blink utilities
 ├── main.py             # Main application
 ├── config.py           # Configuration
 ├── secrets.py          # WiFi/MQTT credentials
@@ -275,7 +279,7 @@ secondTest/
 ├── sensors/
 │   ├── __init__.py
 │   ├── ds18b20.py      # Temperature sensor driver
-│   └── isns20.py        # Current sensor driver
+│   └── isns20.py       # Current sensor driver
 └── .vscode/            # VS Code settings
 ```
 

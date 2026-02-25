@@ -1,6 +1,7 @@
 """
 SD Card Code Updater for Pico 2W
-Triggers update via button press, with backup/rollback support
+Auto-detects SD card with valid update files at boot.
+Rollback via double-button press.
 """
 
 import machine
@@ -14,7 +15,7 @@ SD_SCK = 14
 SD_MOSI = 15
 SD_MISO = 12
 SD_CS = 13
-UPDATE_BUTTON = 10
+UPDATE_BUTTON = 10  # Used for rollback detection
 
 VERSION_FILE = "/.version"
 UPDATE_FOLDER = "/sd/update"
@@ -288,8 +289,6 @@ def cleanup_backup() -> None:
 
 def apply_update() -> bool:
     """Apply update from SD card. Returns True on success."""
-    blink_pattern("11")
-
     new_version = read_update_version()
     if not new_version:
         log("No version found on SD")
@@ -356,6 +355,7 @@ def apply_update() -> bool:
 def check_and_apply_update() -> bool:
     """Main update check. Returns True if update was applied."""
 
+    # Check for rollback first (double-press)
     if detect_rollback_trigger():
         log("Rollback triggered!")
         if perform_rollback():
@@ -364,16 +364,31 @@ def check_and_apply_update() -> bool:
             machine.reset()
         return True
 
-    if not check_update_trigger():
-        return False
-
-    log("Update button pressed!")
-    blink_pattern("1")
+    # Auto-detect SD card with valid update
+    log("Checking for SD card update...")
 
     if not init_sd():
-        blink_pattern("000")
+        log("No SD card")
         deinit_sd()
         return False
+
+    # Check if update folder exists and has version.txt
+    new_version = read_update_version()
+    if not new_version:
+        log("No update files on SD")
+        deinit_sd()
+        return False
+
+    # Check version
+    current = read_version() or "0.0"
+    if new_version <= current:
+        log(f"No update needed ({current} >= {new_version})")
+        deinit_sd()
+        return False
+
+    # Valid update found, apply it
+    log(f"Update found: {current} -> {new_version}")
+    blink_pattern("1")
 
     success = apply_update()
 
