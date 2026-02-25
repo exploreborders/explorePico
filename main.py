@@ -3,7 +3,6 @@ Raspberry Pi Pico 2W - Home Assistant MQTT Integration
 Clean, modular version with proper error handling
 """
 
-import network
 import time
 from umqtt.simple import MQTTClient
 import machine
@@ -11,7 +10,9 @@ import ujson
 import ubinascii
 import micropython
 
-from blink import blink_pattern
+from blink import blink_pattern, led
+from wifi_utils import connect, is_connected
+from updater_utils import log
 
 from config import (
     WIFI_SSID,
@@ -29,6 +30,20 @@ from config import (
     TEMP_CONVERSION_TIME_MS,
     SENSOR_RETRY_INTERVAL_MS,
     validate_config,
+    TOPIC_LED_COMMAND,
+    TOPIC_LED_STATE,
+    TOPIC_LED_CONFIG,
+    TOPIC_TEMP_STATE,
+    TOPIC_TEMP_CONFIG,
+    TOPIC_ROOM_TEMP_STATE,
+    TOPIC_ROOM_TEMP_CONFIG,
+    TOPIC_WATER_TEMP_STATE,
+    TOPIC_WATER_TEMP_CONFIG,
+    TOPIC_CURRENT_STATE,
+    TOPIC_CURRENT_CONFIG,
+    DEVICE_NAME,
+    DEVICE_IDENTIFIER,
+    INTERNAL_TEMP_ADC_PIN,
 )
 
 from sensors import DS18B20, DS18B20Manager, ISNS20, ISNS20Manager
@@ -38,26 +53,8 @@ micropython.alloc_emergency_exception_buf(200)
 uid = ubinascii.hexlify(machine.unique_id()).decode()
 MQTT_CLIENT_ID = f"pico_{uid}"
 
-TOPIC_LED_COMMAND = "homeassistant/switch/pico/led/set"
-TOPIC_LED_STATE = "homeassistant/switch/pico/led/state"
-TOPIC_LED_CONFIG = "homeassistant/switch/pico/led/config"
-
-TOPIC_TEMP_STATE = "homeassistant/sensor/pico/cpu_temp"
-TOPIC_TEMP_CONFIG = "homeassistant/sensor/pico/cpu_temp/config"
-
-TOPIC_ROOM_TEMP_STATE = "homeassistant/sensor/pico/room_temp"
-TOPIC_ROOM_TEMP_CONFIG = "homeassistant/sensor/pico/room_temp/config"
-
-TOPIC_WATER_TEMP_STATE = "homeassistant/sensor/pico/water_temp"
-TOPIC_WATER_TEMP_CONFIG = "homeassistant/sensor/pico/water_temp/config"
-
-TOPIC_CURRENT_STATE = "homeassistant/sensor/pico/current"
-TOPIC_CURRENT_CONFIG = "homeassistant/sensor/pico/current/config"
-
-led = machine.Pin("LED", machine.Pin.OUT)
 led.off()
-temp_sensor = machine.ADC(4)
-wlan = network.WLAN(network.STA_IF)
+temp_sensor = machine.ADC(INTERNAL_TEMP_ADC_PIN)
 
 temp_sensors = DS18B20Manager(DS18B20(DS18B20_PIN), "DS18B20", SENSOR_RETRY_INTERVAL_MS)
 current_sensor = ISNS20Manager(
@@ -84,11 +81,6 @@ def mqtt_publish(topic: str, value: str, retain: bool = True) -> bool:
     return False
 
 
-def log(tag: str, message: str) -> None:
-    """Simple logging with tag prefix."""
-    print(f"[{tag}] {message}")
-
-
 temp_sensors.set_logger(log)
 current_sensor.set_logger(log)
 
@@ -109,26 +101,12 @@ def read_temperature() -> float:
 
 def connect_wifi() -> bool:
     """Connect to WiFi network with retry logic."""
-    log("WiFi", "Connecting...")
-    blink_pattern("10")
-    wlan.active(True)
-    wlan.connect(WIFI_SSID, WIFI_PASSWORD)
-
-    for attempt in range(30):
-        if wlan.isconnected():
-            log("WiFi", f"Connected! IP: {wlan.ifconfig()[0]}")
-            blink_pattern("111")
-            return True
-        time.sleep(1)
-
-    log("WiFi", "Failed to connect")
-    blink_pattern("1000")
-    return False
+    return connect(WIFI_SSID, WIFI_PASSWORD, log_fn=log, blink_fn=blink_pattern)
 
 
 def ensure_wifi() -> bool:
     """Ensure WiFi is connected, reconnect if needed."""
-    if wlan.isconnected():
+    if is_connected():
         return True
     return connect_wifi()
 
@@ -136,8 +114,8 @@ def ensure_wifi() -> bool:
 def get_device_info() -> dict:
     """Return device info for Home Assistant discovery."""
     return {
-        "identifiers": ["pico2w"],
-        "name": "Raspberry Pi Pico 2W",
+        "identifiers": [DEVICE_IDENTIFIER],
+        "name": DEVICE_NAME,
     }
 
 

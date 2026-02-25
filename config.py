@@ -5,8 +5,32 @@ Configuration for Pico 2W MQTT Client
 # MQTT Configuration
 MQTT_SSL = True  # Enable SSL/TLS
 
+# Device Configuration
+DEVICE_NAME = "Raspberry Pi Pico 2W"
+DEVICE_IDENTIFIER = "pico2w"
+
+# MQTT Topics
+TOPIC_LED_COMMAND = "homeassistant/switch/pico/led/set"
+TOPIC_LED_STATE = "homeassistant/switch/pico/led/state"
+TOPIC_LED_CONFIG = "homeassistant/switch/pico/led/config"
+
+TOPIC_TEMP_STATE = "homeassistant/sensor/pico/cpu_temp"
+TOPIC_TEMP_CONFIG = "homeassistant/sensor/pico/cpu_temp/config"
+
+TOPIC_ROOM_TEMP_STATE = "homeassistant/sensor/pico/room_temp"
+TOPIC_ROOM_TEMP_CONFIG = "homeassistant/sensor/pico/room_temp/config"
+
+TOPIC_WATER_TEMP_STATE = "homeassistant/sensor/pico/water_temp"
+TOPIC_WATER_TEMP_CONFIG = "homeassistant/sensor/pico/water_temp/config"
+
+TOPIC_CURRENT_STATE = "homeassistant/sensor/pico/current"
+TOPIC_CURRENT_CONFIG = "homeassistant/sensor/pico/current/config"
+
 # DS18B20 Configuration
 DS18B20_PIN = 22  # GPIO pin for DS18B20 temperature sensors (supports multiple)
+
+# Internal Temperature Sensor
+INTERNAL_TEMP_ADC_PIN = 4  # RP2350 internal temperature sensor (ADC4)
 
 # ISNS20 Current Sensor Configuration
 ISNS20_CS_PIN = 8  # GPIO pin for ISNS20 chip select
@@ -24,6 +48,11 @@ SD_MOSI_PIN = 15
 SD_MISO_PIN = 12
 SD_CS_PIN = 13
 UPDATE_BUTTON_PIN = 10
+
+# GitHub WiFi Updater Configuration
+GITHUB_OWNER = "exploreborders"
+GITHUB_REPO = "explorePico"
+GITHUB_CHECK_ON_BOOT = True
 
 # Try to import from secrets.py, fallback to this file for development
 try:

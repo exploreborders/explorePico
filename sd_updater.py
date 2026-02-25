@@ -1,7 +1,6 @@
 """
-SD Card Code Updater for Pico 2W
+SD Card Updater for Pico 2W
 Auto-detects SD card with valid update files at boot.
-Rollback via double-button press.
 """
 
 import machine
@@ -10,23 +9,30 @@ import uos
 import time
 
 from blink import blink_pattern
+from updater_utils import (
+    log,
+    read_version,
+    write_version,
+    compare_versions,
+    create_backup,
+    restore_backup,
+    cleanup_backup,
+    copy_file_content,
+    detect_rollback_trigger,
+    perform_rollback,
+)
+from config import (
+    SD_SCK_PIN,
+    SD_MOSI_PIN,
+    SD_MISO_PIN,
+    SD_CS_PIN,
+    UPDATE_BUTTON_PIN,
+)
 
-SD_SCK = 14
-SD_MOSI = 15
-SD_MISO = 12
-SD_CS = 13
-UPDATE_BUTTON = 10  # Used for rollback detection
-
-VERSION_FILE = "/.version"
 UPDATE_FOLDER = "/sd/update"
 
 sd_card = None
 uos_mounted = False
-
-
-def log(msg: str) -> None:
-    """Simple logger."""
-    print(f"[SDUPD] {msg}")
 
 
 def init_sd() -> bool:
@@ -37,11 +43,11 @@ def init_sd() -> bool:
         spi = machine.SPI(
             0,
             baudrate=400000,
-            sck=machine.Pin(SD_SCK),
-            mosi=machine.Pin(SD_MOSI),
-            miso=machine.Pin(SD_MISO),
+            sck=machine.Pin(SD_SCK_PIN),
+            mosi=machine.Pin(SD_MOSI_PIN),
+            miso=machine.Pin(SD_MISO_PIN),
         )
-        cs = machine.Pin(SD_CS, machine.Pin.OUT)
+        cs = machine.Pin(SD_CS_PIN, machine.Pin.OUT)
         sd_card = sdcard.SDCard(spi, cs)
         uos.mount(sd_card, "/sd")
         uos_mounted = True
@@ -63,88 +69,10 @@ def deinit_sd() -> None:
         uos_mounted = False
 
 
-def read_version() -> str | None:
-    """Read current version from internal flash."""
-    try:
-        with open(VERSION_FILE, "r") as f:
-            return f.read().strip()
-    except Exception:
-        return None
-
-
-def write_version(version: str) -> None:
-    """Write version to internal flash."""
-    with open(VERSION_FILE, "w") as f:
-        f.write(version)
-
-
 def check_update_trigger() -> bool:
     """Check if update button is pressed at boot."""
-    btn = machine.Pin(UPDATE_BUTTON, machine.Pin.IN, machine.Pin.PULL_UP)
+    btn = machine.Pin(UPDATE_BUTTON_PIN, machine.Pin.IN, machine.Pin.PULL_UP)
     return not btn.value()
-
-
-def detect_rollback_trigger() -> bool:
-    """Check for double-button press within 2 seconds at boot."""
-    btn = machine.Pin(UPDATE_BUTTON, machine.Pin.IN, machine.Pin.PULL_UP)
-
-    if btn.value() == 0:
-        time.sleep(0.1)
-        first_press_time = time.ticks_ms()
-
-        while time.ticks_diff(time.ticks_ms(), first_press_time) < 2000:
-            if btn.value() == 1:
-                time.sleep(0.1)
-                second_wait_start = time.ticks_ms()
-                while time.ticks_diff(time.ticks_ms(), second_wait_start) < 1000:
-                    if btn.value() == 0:
-                        time.sleep(0.1)
-                        while btn.value() == 0:
-                            pass
-                        return True
-                break
-        while btn.value() == 0:
-            pass
-
-    return False
-
-
-def perform_rollback() -> bool:
-    """Restore from backup. Returns True on success."""
-    log("Rolling back...")
-    blink_pattern("010")
-
-    try:
-        files = uos.listdir("/backup")
-        if not files:
-            log("No backup found")
-            blink_pattern("1")
-            return False
-
-        for f in files:
-            try:
-                with open(f"/backup/{f}", "r") as src:
-                    content = src.read()
-                with open(f, "w") as dst:
-                    dst.write(content)
-            except Exception:
-                pass
-
-        try:
-            uos.remove(VERSION_FILE)
-        except Exception:
-            pass
-
-        cleanup_backup()
-
-        log("Rollback complete")
-        blink_pattern("1010")
-        return True
-
-    except Exception as e:
-        log(f"Rollback failed: {e}")
-        blink_pattern("000")
-        return False
 
 
 def list_update_files() -> list[str] | None:
@@ -163,128 +91,6 @@ def read_update_version() -> str | None:
             return f.read().strip()
     except Exception:
         return None
-
-
-def copy_file(src: str, dst: str) -> bool:
-    """Copy file from SD to internal flash. Returns True on success."""
-    try:
-        if "/" in dst:
-            dst_dir = dst.rsplit("/", 1)[0]
-            try:
-                uos.mkdir(dst_dir)
-            except Exception:
-                pass
-
-        with open(f"{UPDATE_FOLDER}/{src}", "r") as f:
-            content = f.read()
-
-        with open(dst, "w") as f:
-            f.write(content)
-
-        log(f"Copied: {src} -> {dst}")
-        return True
-    except Exception as e:
-        log(f"Copy failed: {src} -> {e}")
-        return False
-
-
-def create_backup() -> bool:
-    """Backup current files before update. Returns True on success."""
-    try:
-        try:
-            uos.rmdir("/backup")
-        except Exception:
-            pass
-
-        uos.mkdir("/backup")
-
-        files_to_backup = ["main.py", "config.py", "secrets.py"]
-        for f in files_to_backup:
-            try:
-                with open(f, "r") as src:
-                    content = src.read()
-                with open(f"/backup/{f}", "w") as dst:
-                    dst.write(content)
-            except Exception:
-                pass
-
-        try:
-            uos.mkdir("/backup/sensors")
-            sensor_files = uos.listdir("sensors")
-            for sf in sensor_files:
-                if sf.endswith(".py"):
-                    with open(f"sensors/{sf}", "r") as src:
-                        content = src.read()
-                    with open(f"/backup/sensors/{sf}", "w") as dst:
-                        dst.write(content)
-        except Exception:
-            pass
-
-        log("Backup created")
-        return True
-    except Exception as e:
-        log(f"Backup failed: {e}")
-        return False
-
-
-def restore_backup() -> bool:
-    """Restore files from backup. Returns True on success."""
-    try:
-        files = uos.listdir("/backup")
-        for f in files:
-            try:
-                if f == "sensors":
-                    sensor_files = uos.listdir("/backup/sensors")
-                    try:
-                        uos.mkdir("sensors")
-                    except Exception:
-                        pass
-                    for sf in sensor_files:
-                        with open(f"/backup/sensors/{sf}", "r") as src:
-                            content = src.read()
-                        with open(f"sensors/{sf}", "w") as dst:
-                            dst.write(content)
-                else:
-                    with open(f"/backup/{f}", "r") as src:
-                        content = src.read()
-                    with open(f, "w") as dst:
-                        dst.write(content)
-            except Exception:
-                pass
-
-        uos.rmdir("/backup")
-
-        log("Backup restored")
-        return True
-    except Exception as e:
-        log(f"Restore failed: {e}")
-        return False
-
-
-def cleanup_backup() -> None:
-    """Remove backup folder."""
-    try:
-        files = uos.listdir("/backup")
-        for f in files:
-            if f == "sensors":
-                try:
-                    sensor_files = uos.listdir("/backup/sensors")
-                    for sf in sensor_files:
-                        try:
-                            uos.remove(f"/backup/sensors/{sf}")
-                        except Exception:
-                            pass
-                    uos.rmdir("/backup/sensors")
-                except Exception:
-                    pass
-            else:
-                try:
-                    uos.remove(f"/backup/{f}")
-                except Exception:
-                    pass
-        uos.rmdir("/backup")
-    except Exception:
-        pass
 
 
 def apply_update() -> bool:
@@ -323,18 +129,17 @@ def apply_update() -> bool:
         if f == "version.txt":
             continue
 
-        if f == "main.py":
-            dst = "main.py"
-        elif f == "config.py":
-            dst = "config.py"
-        elif f == "secrets.py":
-            dst = "secrets.py"
-        elif f.startswith("sensors/"):
-            dst = f
-        else:
-            dst = f
+        try:
+            with open(f"{UPDATE_FOLDER}/{f}", "r") as src:
+                content = src.read()
 
-        if not copy_file(f, dst):
+            if not copy_file_content(content, f):
+                success = False
+                break
+
+            log(f"Copied: {f}")
+        except Exception as e:
+            log(f"Copy failed: {f} -> {e}")
             success = False
             break
 
@@ -355,8 +160,7 @@ def apply_update() -> bool:
 def check_and_apply_update() -> bool:
     """Main update check. Returns True if update was applied."""
 
-    # Check for rollback first (double-press)
-    if detect_rollback_trigger():
+    if detect_rollback_trigger(UPDATE_BUTTON_PIN):
         log("Rollback triggered!")
         if perform_rollback():
             log("Rebooting...")
@@ -364,7 +168,6 @@ def check_and_apply_update() -> bool:
             machine.reset()
         return True
 
-    # Auto-detect SD card with valid update
     log("Checking for SD card update...")
 
     if not init_sd():
@@ -372,21 +175,18 @@ def check_and_apply_update() -> bool:
         deinit_sd()
         return False
 
-    # Check if update folder exists and has version.txt
     new_version = read_update_version()
     if not new_version:
         log("No update files on SD")
         deinit_sd()
         return False
 
-    # Check version
     current = read_version() or "0.0"
-    if new_version <= current:
+    if compare_versions(current, new_version) <= 0:
         log(f"No update needed ({current} >= {new_version})")
         deinit_sd()
         return False
 
-    # Valid update found, apply it
     log(f"Update found: {current} -> {new_version}")
     blink_pattern("1")
 

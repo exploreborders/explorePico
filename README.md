@@ -1,6 +1,6 @@
-# Pico 2W MQTT Client with SD Card Updater
+# Pico 2W MQTT Client with SD Card & GitHub Updater
 
-MicroPython project for Raspberry Pi Pico 2W that integrates with Home Assistant via MQTT. Reads DS18B20 temperature sensors and Pmod ISNS20 current sensor. Supports wireless code updates via SD card.
+MicroPython project for Raspberry Pi Pico 2W that integrates with Home Assistant via MQTT. Reads DS18B20 temperature sensors and Pmod ISNS20 current sensor. Supports wireless code updates via SD card or GitHub.
 
 ## Features
 
@@ -11,7 +11,8 @@ MicroPython project for Raspberry Pi Pico 2W that integrates with Home Assistant
 - **Internal Temperature**: RP2350 internal temperature sensor
 - **Auto-Reconnect**: WiFi and MQTT with exponential backoff
 - **Sensor Hot-Swap**: Automatic detection of connected/disconnected sensors
-- **SD Card Updates**: Update code via SD card without computer connection
+- **SD Card Updates**: Update code via SD card
+- **GitHub WiFi Updates**: Auto-update from GitHub releases
 - **Rollback**: Restore previous version if update fails
 
 ## Hardware
@@ -110,7 +111,10 @@ Using MicroPico (VS Code extension):
 micropico connect
 %send boot.py
 %send sd_updater.py
+%send github_updater.py
 %send blink.py
+%send wifi_utils.py
+%send updater_utils.py
 %send main.py
 %send config.py
 %send secrets.py
@@ -119,12 +123,15 @@ micropico connect
 
 Or using mpremote:
 ```bash
+mpremote cp boot.py :
+mpremote cp sd_updater.py :
+mpremote cp github_updater.py :
+mpremote cp blink.py :
+mpremote cp wifi_utils.py :
+mpremote cp updater_utils.py :
 mpremote cp main.py :
 mpremote cp config.py :
 mpremote cp secrets.py :
-mpremote cp boot.py :
-mpremote cp sd_updater.py :
-mpremote cp blink.py :
 mpremote cp -r sensors/ :
 ```
 
@@ -208,6 +215,97 @@ If something goes wrong, you can restore the previous version:
 - **Backup**: Creates backup before updating
 - **Auto-rollback**: If update fails, automatically restores previous version
 
+## GitHub WiFi Updater
+
+### Overview
+
+The Pico can automatically check GitHub for new releases and update itself over WiFi. No computer or SD card needed!
+
+### How It Works
+
+```
+Boot
+    │
+    ├─ GitHub Check (priority)
+    │     │
+    │     └─ Newer release? → Download → Write → Reboot
+    │
+    ├─ SD Card (fallback)
+    │     │
+    │     └─ Newer version? → Download → Write → Reboot
+    │
+    └─ Continue to main.py
+```
+
+### LED Feedback Patterns
+
+| Pattern | Meaning |
+|---------|---------|
+| "1" | Checking GitHub |
+| "11" | Downloading |
+| "111" | Update complete, rebooting |
+| "000" | Failed |
+| No blink | No update available |
+
+### Setup
+
+1. **Make repo public** (already done)
+2. **Create GitHub releases** with version tags (e.g., v1.7)
+3. **Attach files** to release:
+   - main.py
+   - config.py
+   - boot.py
+   - blink.py
+   - wifi_utils.py
+   - updater_utils.py
+   - sd_updater.py
+   - github_updater.py
+   - sensors/__init__.py
+   - sensors/ds18b20.py
+   - sensors/isns20.py
+
+### Creating a GitHub Release
+
+1. Go to your repo: https://github.com/exploreborders/explorePico
+2. Click **Create a new release**
+3. Tag version: `v1.7` (must start with v)
+4. Release title: `v1.7`
+5. Attach files by uploading them
+6. Click **Publish release**
+
+### Configuration
+
+Edit `config.py` to set your GitHub repo:
+
+```python
+GITHUB_OWNER = "exploreborders"
+GITHUB_REPO = "explorePico"
+GITHUB_CHECK_ON_BOOT = True
+```
+
+### Update Flow
+
+1. Pico connects to WiFi
+2. Checks GitHub API for latest release
+3. Compares version with current
+4. If newer: downloads files from release
+5. Creates backup
+6. Writes new files to flash
+7. Reboots
+
+### Safety Features
+
+- Version comparison (won't downgrade)
+- Backup before update
+- Auto-rollback on failure
+- SD card as fallback
+
+### Notes
+
+- Repository must be **public** (or use GitHub token)
+- Files must be attached to the release
+- Version format: `v1.x.x` (e.g., v1.7)
+
 ## MQTT Topics
 
 ### State Topics
@@ -269,9 +367,12 @@ The device is automatically discovered via MQTT discovery. After running, you sh
 
 ```
 secondTest/
-├── boot.py              # Entry point with SD update check
-├── sd_updater.py       # SD card code updater module
+├── boot.py              # Entry point with GitHub & SD update check
+├── github_updater.py   # GitHub WiFi updater
+├── sd_updater.py       # SD card updater
 ├── blink.py            # Shared LED blink utilities
+├── wifi_utils.py       # Shared WiFi connection utilities
+├── updater_utils.py    # Shared backup/restore, version, logging
 ├── main.py             # Main application
 ├── config.py           # Configuration
 ├── secrets.py          # WiFi/MQTT credentials
