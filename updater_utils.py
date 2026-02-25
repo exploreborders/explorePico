@@ -30,7 +30,7 @@ def set_logger(log_fn, tag: str = "UPD") -> None:
     _log_tag = tag
 
 
-def log(tag: str, message: str = None) -> None:
+def log(tag: str, message: str | None = None) -> None:
     """Logger with tag prefix.
 
     Args:

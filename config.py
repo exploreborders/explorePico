@@ -37,7 +37,7 @@ ISNS20_CS_PIN = 8  # GPIO pin for ISNS20 chip select
 ISNS20_SPI_PORT = 0  # SPI port 0 (SCK=GP2, MOSI=GP3, MISO=GP4)
 
 # Timing
-TEMP_UPDATE_INTERVAL_MS = 1000
+SENSOR_UPDATE_INTERVAL_MS = 1000
 RECONNECT_DELAY_S = 5
 TEMP_CONVERSION_TIME_MS = 750  # DS18B20 conversion time
 SENSOR_RETRY_INTERVAL_MS = 60000  # Retry failed sensor init every 60s
@@ -52,7 +52,6 @@ UPDATE_BUTTON_PIN = 10
 # GitHub WiFi Updater Configuration
 GITHUB_OWNER = "exploreborders"
 GITHUB_REPO = "explorePico"
-GITHUB_CHECK_ON_BOOT = True
 
 # Try to import from secrets.py, fallback to this file for development
 try:

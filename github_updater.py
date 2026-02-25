@@ -154,21 +154,3 @@ def check_and_update(owner: str, repo: str) -> bool:
         return True
 
     return False
-
-
-def check_for_update(owner: str, repo: str) -> bool:
-    """Check if update is available without applying."""
-    if not is_connected():
-        return False
-
-    release = get_latest_release(owner, repo)
-    if not release:
-        return False
-
-    new_version = release.get("tag", "")
-    if not new_version:
-        return False
-
-    current = read_version() or "0.0"
-
-    return compare_versions(current, new_version) > 0

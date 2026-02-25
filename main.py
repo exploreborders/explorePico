@@ -25,7 +25,7 @@ from config import (
     DS18B20_PIN,
     ISNS20_CS_PIN,
     ISNS20_SPI_PORT,
-    TEMP_UPDATE_INTERVAL_MS,
+    SENSOR_UPDATE_INTERVAL_MS,
     RECONNECT_DELAY_S,
     TEMP_CONVERSION_TIME_MS,
     SENSOR_RETRY_INTERVAL_MS,
@@ -56,14 +56,16 @@ MQTT_CLIENT_ID = f"pico_{uid}"
 led.off()
 temp_sensor = machine.ADC(INTERNAL_TEMP_ADC_PIN)
 
-temp_sensors = DS18B20Manager(DS18B20(DS18B20_PIN), "DS18B20", SENSOR_RETRY_INTERVAL_MS)
+temp_sensors = DS18B20Manager(
+    DS18B20(DS18B20_PIN), "DS18B20", SENSOR_RETRY_INTERVAL_MS
+)
 current_sensor = ISNS20Manager(
     ISNS20(ISNS20_CS_PIN, ISNS20_SPI_PORT), "ISNS20", SENSOR_RETRY_INTERVAL_MS
 )
 
 mqtt_client = None
 led_state = False
-last_temp_publish = 0
+last_sensor_publish = 0
 
 # Track last published values for all MQTT topics
 _last_mqtt_values = {}
@@ -346,17 +348,17 @@ def handle_mqtt_message() -> None:
     mqtt_client.check_msg()
 
 
-def handle_temperature_publish() -> None:
+def handle_sensor_publish() -> None:
     """Publish temperature and current if interval has elapsed."""
-    global last_temp_publish
+    global last_sensor_publish
 
     now = time.ticks_ms()
-    if time.ticks_diff(now, last_temp_publish) >= TEMP_UPDATE_INTERVAL_MS:
+    if time.ticks_diff(now, last_sensor_publish) >= SENSOR_UPDATE_INTERVAL_MS:
         publish_temperature()
         publish_room_temperature()
         publish_water_temperature()
         publish_current()
-        last_temp_publish = now
+        last_sensor_publish = now
 
 
 def run_main_loop() -> None:
@@ -365,7 +367,7 @@ def run_main_loop() -> None:
 
     try:
         handle_mqtt_message()
-        handle_temperature_publish()
+        handle_sensor_publish()
         time.sleep(0.1)
 
     except OSError as e:
@@ -389,7 +391,7 @@ def run_main_loop() -> None:
 
 def main() -> None:
     """Main entry point."""
-    global last_temp_publish, mqtt_client
+    global last_sensor_publish, mqtt_client
 
     validate_config()
 

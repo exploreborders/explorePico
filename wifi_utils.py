@@ -58,18 +58,3 @@ def connect(
     if log_fn:
         log_fn("WiFi", "Failed to connect")
     return False
-
-
-def get_ip() -> str | None:
-    """Get IP address if connected."""
-    wlan = get_wlan()
-    if wlan.isconnected():
-        return wlan.ifconfig()[0]
-    return None
-
-
-def disconnect() -> bool:
-    """Disconnect from WiFi."""
-    wlan = get_wlan()
-    wlan.active(False)
-    return True

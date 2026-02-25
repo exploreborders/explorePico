@@ -69,12 +69,6 @@ def deinit_sd() -> None:
         uos_mounted = False
 
 
-def check_update_trigger() -> bool:
-    """Check if update button is pressed at boot."""
-    btn = machine.Pin(UPDATE_BUTTON_PIN, machine.Pin.IN, machine.Pin.PULL_UP)
-    return not btn.value()
-
-
 def list_update_files() -> list[str] | None:
     """List files in update folder. Returns None if folder doesn't exist."""
     try:
