@@ -158,17 +158,13 @@ The SD Card Updater automatically detects an SD card with valid update files at 
 
 | Pattern | Meaning |
 |---------|---------|
-| No blink | Normal boot, no SD card or no update |
-| **Update** | |
-| "1" | Update found, starting |
-| "10" | No update needed (same/older version) |
-| "111" | ✅ Update successful! |
-| "000" | ❌ Update failed |
-| **Rollback** | |
-| "010" | Rollback detected |
-| "1010" | ✅ Rollback successful! |
-| "000" | ❌ Rollback failed |
-| "1" | No backup found |
+| **Boot Sequence** | |
+| "10" | WiFi/MQTT Connecting |
+| "1010" | WiFi/MQTT Connected (normal boot) |
+| **Update/Rollback** | |
+| "11" | Checking for updates |
+| "11011" | ✅ Update/Rollback successful! |
+| "111" | ❌ Failed (or no backup found) |
 
 ### Updating Code
 
@@ -241,11 +237,11 @@ Boot
 
 | Pattern | Meaning |
 |---------|---------|
-| "1" | Checking GitHub |
-| "11" | Downloading |
-| "111" | Update complete, rebooting |
-| "000" | Failed |
-| No blink | No update available |
+| "10" | WiFi Connecting |
+| "1010" | WiFi Connected (normal) |
+| "111" | Failed |
+| "11" | Checking GitHub |
+| "11011" | Update complete, rebooting |
 
 ### Setup
 

@@ -56,9 +56,7 @@ MQTT_CLIENT_ID = f"pico_{uid}"
 led.off()
 temp_sensor = machine.ADC(INTERNAL_TEMP_ADC_PIN)
 
-temp_sensors = DS18B20Manager(
-    DS18B20(DS18B20_PIN), "DS18B20", SENSOR_RETRY_INTERVAL_MS
-)
+temp_sensors = DS18B20Manager(DS18B20(DS18B20_PIN), "DS18B20", SENSOR_RETRY_INTERVAL_MS)
 current_sensor = ISNS20Manager(
     ISNS20(ISNS20_CS_PIN, ISNS20_SPI_PORT), "ISNS20", SENSOR_RETRY_INTERVAL_MS
 )
@@ -298,7 +296,7 @@ def connect_mqtt() -> bool:
     global mqtt_client
 
     log("MQTT", "Connecting...")
-    blink_pattern("01")
+    blink_pattern("10")
 
     try:
         mqtt_client = create_mqtt_client()
@@ -319,12 +317,12 @@ def connect_mqtt() -> bool:
         publish_temperature()
 
         log("MQTT", "Ready!")
-        blink_pattern("11111")
+        blink_pattern("1010")
         return True
 
     except Exception as e:
         log("ERROR", f"MQTT connection failed: {e}")
-        blink_pattern("10000")
+        blink_pattern("111")
         disconnect_mqtt()
         return False
 
@@ -372,7 +370,7 @@ def run_main_loop() -> None:
 
     except OSError as e:
         log("WARN", f"Connection lost: {e}")
-        blink_pattern("100")
+        blink_pattern("111")
         disconnect_mqtt()
         time.sleep(2)
 
@@ -380,12 +378,12 @@ def run_main_loop() -> None:
         err_str = str(e)
         if "closed" in err_str.lower() or "ECONNRESET" in err_str:
             log("WARN", "Connection closed by broker")
-            blink_pattern("100")
+            blink_pattern("111")
             disconnect_mqtt()
             time.sleep(2)
         else:
             log("ERROR", f"Unexpected error: {e}")
-            blink_pattern("1000")
+            blink_pattern("111")
             time.sleep(1)
 
 
@@ -397,7 +395,7 @@ def main() -> None:
 
     log("BOOT", f"Starting Pico 2W MQTT Client - {uid}")
 
-    blink_pattern("111111")
+    blink_pattern("11011")
 
     disconnect_mqtt()
 

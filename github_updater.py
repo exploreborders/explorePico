@@ -61,7 +61,7 @@ def download_and_update(owner: str, repo: str, release_info: dict) -> bool:
     blink_pattern("11")
 
     if not create_backup():
-        blink_pattern("000")
+        blink_pattern("111")
         return False
 
     files_updated = 0
@@ -106,12 +106,12 @@ def download_and_update(owner: str, repo: str, release_info: dict) -> bool:
         log("Update failed, restoring backup")
         restore_backup()
         cleanup_backup()
-        blink_pattern("000")
+        blink_pattern("111")
         return False
 
     cleanup_backup()
     log(f"Updated {files_updated} files")
-    blink_pattern("111")
+    blink_pattern("11011")
     return True
 
 
@@ -122,7 +122,7 @@ def check_and_update(owner: str, repo: str) -> bool:
         return False
 
     log("Checking GitHub for updates...")
-    blink_pattern("1")
+    blink_pattern("11")
 
     release = get_latest_release(owner, repo)
     if not release:

@@ -299,17 +299,17 @@ def perform_rollback() -> bool:
     from blink import blink_pattern
 
     log("Rolling back...")
-    blink_pattern("010")
+    blink_pattern("11")
 
     try:
         files = uos.listdir(BACKUP_FOLDER)
         if not files:
             log("No backup found")
-            blink_pattern("1")
+            blink_pattern("111")
             return False
 
         if not restore_backup():
-            blink_pattern("000")
+            blink_pattern("111")
             return False
 
         try:
@@ -320,10 +320,10 @@ def perform_rollback() -> bool:
         cleanup_backup()
 
         log("Rollback complete")
-        blink_pattern("1010")
+        blink_pattern("11011")
         return True
 
     except Exception as e:
         log(f"Rollback failed: {e}")
-        blink_pattern("000")
+        blink_pattern("111")
         return False

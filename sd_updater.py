@@ -92,7 +92,7 @@ def apply_update() -> bool:
     new_version = read_update_version()
     if not new_version:
         log("No version found on SD")
-        blink_pattern("10")
+        blink_pattern("11")
         return False
 
     current = read_version() or "0.0"
@@ -100,13 +100,13 @@ def apply_update() -> bool:
 
     if new_version <= current:
         log("No update needed")
-        blink_pattern("10")
+        blink_pattern("11")
         return False
 
     files = list_update_files()
     if not files:
         log("No update files found")
-        blink_pattern("10")
+        blink_pattern("11")
         return False
 
     update_files = [f for f in files if f.endswith(".py") or f == "version.txt"]
@@ -115,7 +115,7 @@ def apply_update() -> bool:
 
     if not create_backup():
         log("Backup failed, aborting")
-        blink_pattern("000")
+        blink_pattern("111")
         return False
 
     success = True
@@ -141,13 +141,13 @@ def apply_update() -> bool:
         write_version(new_version)
         cleanup_backup()
         log(f"Update to {new_version} complete!")
-        blink_pattern("111")
+        blink_pattern("11011")
         return True
     else:
         log("Update failed, restoring backup")
         restore_backup()
         cleanup_backup()
-        blink_pattern("000")
+        blink_pattern("111")
         return False
 
 
@@ -182,7 +182,7 @@ def check_and_apply_update() -> bool:
         return False
 
     log(f"Update found: {current} -> {new_version}")
-    blink_pattern("1")
+    blink_pattern("11")
 
     success = apply_update()
 
