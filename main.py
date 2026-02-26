@@ -3,6 +3,9 @@ Raspberry Pi Pico 2W - Home Assistant MQTT Integration
 Clean, modular version with proper error handling
 """
 
+# -----------------------------------------------------------------------------
+# IMPORTS
+# -----------------------------------------------------------------------------
 import time
 from umqtt.simple import MQTTClient
 import machine
@@ -13,6 +16,7 @@ import micropython
 from blink import blink_pattern, led
 from wifi_utils import connect, is_connected
 from updater_utils import log
+from sensors import DS18B20, DS18B20Manager, ISNS20, ISNS20Manager
 
 from config import (
     WIFI_SSID,
@@ -29,6 +33,13 @@ from config import (
     RECONNECT_DELAY_S,
     TEMP_CONVERSION_TIME_MS,
     SENSOR_RETRY_INTERVAL_MS,
+    MQTT_DELAY_DISCOVERY,
+    MQTT_DELAY_CONNECT,
+    MQTT_DELAY_SUBSCRIBE,
+    MQTT_DELAY_INITIAL_STATE,
+    MQTT_LOOP_DELAY,
+    ERROR_DELAY_SHORT,
+    ERROR_DELAY_LONG,
     validate_config,
     TOPIC_LED_COMMAND,
     TOPIC_LED_STATE,
@@ -47,29 +58,35 @@ from config import (
     INTERNAL_TEMP_ADC_PIN,
 )
 
-from sensors import DS18B20, DS18B20Manager, ISNS20, ISNS20Manager
 
+# -----------------------------------------------------------------------------
+# CONSTANTS & GLOBAL STATE
+# -----------------------------------------------------------------------------
 micropython.alloc_emergency_exception_buf(200)
 
 uid = ubinascii.hexlify(machine.unique_id()).decode()
 MQTT_CLIENT_ID = f"pico_{uid}"
 
-led.off()
+# Sensor objects
 temp_sensor = machine.ADC(INTERNAL_TEMP_ADC_PIN)
-
 temp_sensors = DS18B20Manager(DS18B20(DS18B20_PIN), "DS18B20", SENSOR_RETRY_INTERVAL_MS)
 current_sensor = ISNS20Manager(
     ISNS20(ISNS20_CS_PIN, ISNS20_SPI_PORT), "ISNS20", SENSOR_RETRY_INTERVAL_MS
 )
+temp_sensors.set_logger(log)
+current_sensor.set_logger(log)
+led.off()
 
+# MQTT state
 mqtt_client = None
 led_state = False
 last_sensor_publish = 0
-
-# Track last published values for all MQTT topics
 _last_mqtt_values = {}
 
 
+# -----------------------------------------------------------------------------
+# MQTT HELPERS
+# -----------------------------------------------------------------------------
 def mqtt_publish(topic: str, value: str, retain: bool = True) -> bool:
     """Publish to MQTT only if value changed. Returns True if published."""
     global _last_mqtt_values
@@ -82,10 +99,31 @@ def mqtt_publish(topic: str, value: str, retain: bool = True) -> bool:
     return False
 
 
-temp_sensors.set_logger(log)
-current_sensor.set_logger(log)
+def _publish_sensor_value(
+    read_func,
+    state_topic: str,
+    sensor_manager=None,
+    sensor_index: int | None = None,
+    needs_unavailable: bool = False,
+) -> None:
+    """Generic sensor publish with unavailable handling."""
+    value = read_func()
+
+    if sensor_index is not None and value is not None:
+        if isinstance(value, list) and len(value) > sensor_index:
+            value = value[sensor_index]
+        else:
+            value = None
+
+    if value is not None:
+        mqtt_publish(state_topic, str(value))
+    elif needs_unavailable and sensor_manager and sensor_manager.ever_connected:
+        mqtt_publish(state_topic, "unavailable")
 
 
+# -----------------------------------------------------------------------------
+# SENSOR FUNCTIONS
+# -----------------------------------------------------------------------------
 def read_temperature() -> float:
     """Read internal temperature sensor (RP2350).
 
@@ -112,6 +150,9 @@ def ensure_wifi() -> bool:
     return connect_wifi()
 
 
+# -----------------------------------------------------------------------------
+# MQTT CONFIG GETTERS
+# -----------------------------------------------------------------------------
 def get_device_info() -> dict:
     """Return device info for Home Assistant discovery."""
     return {
@@ -182,30 +223,72 @@ def get_current_config() -> dict:
     }
 
 
+# -----------------------------------------------------------------------------
+# REGISTRIES
+# -----------------------------------------------------------------------------
+SENSOR_REGISTRY = [
+    {
+        "name": "temperature",
+        "read_func": read_temperature,
+        "state_topic": TOPIC_TEMP_STATE,
+        "needs_unavailable": False,
+    },
+    {
+        "name": "room_temperature",
+        "read_func": lambda: temp_sensors.read(TEMP_CONVERSION_TIME_MS),
+        "state_topic": TOPIC_ROOM_TEMP_STATE,
+        "sensor_index": 0,
+        "sensor_manager": temp_sensors,
+        "needs_unavailable": True,
+    },
+    {
+        "name": "water_temperature",
+        "read_func": lambda: temp_sensors.read(TEMP_CONVERSION_TIME_MS),
+        "state_topic": TOPIC_WATER_TEMP_STATE,
+        "sensor_index": 1,
+        "sensor_manager": temp_sensors,
+        "needs_unavailable": True,
+    },
+    {
+        "name": "current",
+        "read_func": current_sensor.read,
+        "state_topic": TOPIC_CURRENT_STATE,
+        "sensor_manager": current_sensor,
+        "needs_unavailable": True,
+    },
+]
+
+DISCOVERY_REGISTRY = [
+    (TOPIC_LED_CONFIG, get_led_config),
+    (TOPIC_TEMP_CONFIG, get_temp_config),
+    (TOPIC_ROOM_TEMP_CONFIG, get_room_temp_config),
+    (TOPIC_WATER_TEMP_CONFIG, get_water_temp_config),
+    (TOPIC_CURRENT_CONFIG, get_current_config),
+]
+
+
+# -----------------------------------------------------------------------------
+# MQTT PUBLISH FUNCTIONS
+# -----------------------------------------------------------------------------
+def publish_all_sensors() -> None:
+    """Publish all sensor values from registry."""
+    for sensor in SENSOR_REGISTRY:
+        _publish_sensor_value(
+            read_func=sensor["read_func"],
+            state_topic=sensor["state_topic"],
+            sensor_manager=sensor.get("sensor_manager"),
+            sensor_index=sensor.get("sensor_index"),
+            needs_unavailable=sensor.get("needs_unavailable", False),
+        )
+
+
 def publish_discovery() -> None:
     """Publish Home Assistant MQTT discovery configs."""
-    led_config = ujson.dumps(get_led_config())
-    temp_config = ujson.dumps(get_temp_config())
-    room_temp_config = ujson.dumps(get_room_temp_config())
-    water_temp_config = ujson.dumps(get_water_temp_config())
-    current_config = ujson.dumps(get_current_config())
-
-    log("MQTT", f"LED config: {len(led_config)} bytes")
-    log("MQTT", f"Temp config: {len(temp_config)} bytes")
-    log("MQTT", f"Room temp config: {len(room_temp_config)} bytes")
-    log("MQTT", f"Water temp config: {len(water_temp_config)} bytes")
-    log("MQTT", f"Current config: {len(current_config)} bytes")
-
-    mqtt_client.publish(TOPIC_LED_CONFIG, led_config, retain=True)
-    time.sleep(0.2)
-    mqtt_client.publish(TOPIC_TEMP_CONFIG, temp_config, retain=True)
-    time.sleep(0.2)
-    mqtt_client.publish(TOPIC_ROOM_TEMP_CONFIG, room_temp_config, retain=True)
-    time.sleep(0.2)
-    mqtt_client.publish(TOPIC_WATER_TEMP_CONFIG, water_temp_config, retain=True)
-    time.sleep(0.2)
-    mqtt_client.publish(TOPIC_CURRENT_CONFIG, current_config, retain=True)
-    time.sleep(0.2)
+    for topic, config_func in DISCOVERY_REGISTRY:
+        payload = ujson.dumps(config_func())
+        log("MQTT", f"{config_func.__name__}: {len(payload)} bytes")
+        mqtt_client.publish(topic, payload, retain=True)
+        time.sleep(MQTT_DELAY_DISCOVERY)
 
 
 def publish_led_state() -> None:
@@ -214,47 +297,9 @@ def publish_led_state() -> None:
     mqtt_publish(TOPIC_LED_STATE, state)
 
 
-def publish_temperature() -> None:
-    """Read and publish temperature."""
-    temp = read_temperature()
-    mqtt_publish(TOPIC_TEMP_STATE, str(temp))
-
-
-def publish_room_temperature() -> None:
-    """Read and publish room temperature from DS18B20 (first sensor)."""
-    temps = temp_sensors.read(TEMP_CONVERSION_TIME_MS)
-    if temps is not None and len(temps) > 0:
-        temp = temps[0]
-        if temp is not None:
-            mqtt_publish(TOPIC_ROOM_TEMP_STATE, str(temp))
-        elif temp_sensors.ever_connected:
-            mqtt_publish(TOPIC_ROOM_TEMP_STATE, "unavailable")
-    elif temp_sensors.ever_connected:
-        mqtt_publish(TOPIC_ROOM_TEMP_STATE, "unavailable")
-
-
-def publish_water_temperature() -> None:
-    """Read and publish water temperature from DS18B20 (second sensor)."""
-    temps = temp_sensors.read(TEMP_CONVERSION_TIME_MS)
-    if temps is not None and len(temps) > 1:
-        temp = temps[1]
-        if temp is not None:
-            mqtt_publish(TOPIC_WATER_TEMP_STATE, str(temp))
-        elif temp_sensors.ever_connected:
-            mqtt_publish(TOPIC_WATER_TEMP_STATE, "unavailable")
-    elif temp_sensors.ever_connected:
-        mqtt_publish(TOPIC_WATER_TEMP_STATE, "unavailable")
-
-
-def publish_current() -> None:
-    """Read and publish current from ISNS20 sensor."""
-    current = current_sensor.read()
-    if current is not None:
-        mqtt_publish(TOPIC_CURRENT_STATE, str(current))
-    elif current_sensor.ever_connected:
-        mqtt_publish(TOPIC_CURRENT_STATE, "unavailable")
-
-
+# -----------------------------------------------------------------------------
+# MQTT CALLBACKS
+# -----------------------------------------------------------------------------
 def on_message(topic: bytes, msg: bytes) -> None:
     """Handle incoming MQTT messages."""
     global led_state
@@ -279,6 +324,9 @@ def on_message(topic: bytes, msg: bytes) -> None:
         log("ERROR", f"Message handling failed: {e}")
 
 
+# -----------------------------------------------------------------------------
+# MQTT CONNECTION
+# -----------------------------------------------------------------------------
 def create_mqtt_client() -> MQTTClient:
     """Create and configure MQTT client."""
     client = MQTTClient(
@@ -310,18 +358,18 @@ def connect_mqtt() -> bool:
         mqtt_client.publish(TOPIC_AVAILABILITY, "online", retain=True)
         log("MQTT", "Connected!")
 
-        time.sleep(1)
+        time.sleep(MQTT_DELAY_CONNECT)
         mqtt_client.subscribe(TOPIC_LED_COMMAND)
         log("MQTT", "Subscribed!")
 
-        time.sleep(1)
+        time.sleep(MQTT_DELAY_SUBSCRIBE)
         publish_discovery()
         log("MQTT", "Discovery published!")
 
-        time.sleep(0.5)
+        time.sleep(MQTT_DELAY_INITIAL_STATE)
         publish_led_state()
-        time.sleep(0.2)
-        publish_temperature()
+        time.sleep(MQTT_DELAY_DISCOVERY)
+        publish_all_sensors()
 
         log("MQTT", "Ready!")
         blink_pattern("1010")
@@ -348,21 +396,21 @@ def disconnect_mqtt() -> None:
             mqtt_client = None
 
 
+# -----------------------------------------------------------------------------
+# MAIN LOOP
+# -----------------------------------------------------------------------------
 def handle_mqtt_message() -> None:
     """Check for and handle incoming MQTT messages."""
     mqtt_client.check_msg()
 
 
 def handle_sensor_publish() -> None:
-    """Publish temperature and current if interval has elapsed."""
+    """Publish all sensor values if interval has elapsed."""
     global last_sensor_publish
 
     now = time.ticks_ms()
     if time.ticks_diff(now, last_sensor_publish) >= SENSOR_UPDATE_INTERVAL_MS:
-        publish_temperature()
-        publish_room_temperature()
-        publish_water_temperature()
-        publish_current()
+        publish_all_sensors()
         last_sensor_publish = now
 
 
@@ -373,13 +421,13 @@ def run_main_loop() -> None:
     try:
         handle_mqtt_message()
         handle_sensor_publish()
-        time.sleep(0.1)
+        time.sleep(MQTT_LOOP_DELAY)
 
     except OSError as e:
         log("WARN", f"Connection lost: {e}")
         blink_pattern("111")
         disconnect_mqtt()
-        time.sleep(2)
+        time.sleep(ERROR_DELAY_LONG)
 
     except Exception as e:
         err_str = str(e)
@@ -387,13 +435,16 @@ def run_main_loop() -> None:
             log("WARN", "Connection closed by broker")
             blink_pattern("111")
             disconnect_mqtt()
-            time.sleep(2)
+            time.sleep(ERROR_DELAY_LONG)
         else:
             log("ERROR", f"Unexpected error: {e}")
             blink_pattern("111")
-            time.sleep(1)
+            time.sleep(ERROR_DELAY_SHORT)
 
 
+# -----------------------------------------------------------------------------
+# ENTRY POINT
+# -----------------------------------------------------------------------------
 def main() -> None:
     """Main entry point."""
     global last_sensor_publish, mqtt_client
