@@ -1,7 +1,47 @@
 """
 GitHub WiFi Updater for Pico 2W
-Checks GitHub releases for updates and auto-updates
-Downloads all .py files from release assets
+
+Checks GitHub releases for updates and automatically downloads
+and applies firmware updates over WiFi.
+
+Update Process:
+    1. Connect to WiFi
+    2. Fetch latest release from GitHub API
+    3. Compare version with current
+    4. If newer, backup current firmware
+    5. Download .py files from release assets
+    6. Reboot to apply changes
+
+GitHub Setup:
+    1. Create a GitHub repository with .py files
+    2. Create a release with version tag (e.g., v1.2.0)
+    3. Upload .py files as release assets
+    4. Configure GITHUB_OWNER and GITHUB_REPO in config.py
+
+Release Asset Naming:
+    Files must be named with .py extension:
+    - main.py
+    - config.py
+    - sensors/ds18b20.py
+    - etc.
+
+Rollback:
+    If update fails, automatically restores from backup.
+    Manual rollback: Press update button twice within 2 seconds at boot.
+
+Usage:
+    Automatic on boot if WiFi is available.
+    Configure GITHUB_OWNER and GITHUB_REPO in config.py.
+
+API:
+    Uses GitHub REST API: https://api.github.com/repos/{owner}/{repo}/releases/latest
+
+Notes:
+    - Requires urequests library
+    - Only .py files are downloaded
+    - secrets.py is never overwritten
+    - Automatic rollback on failure
+    - 10 second timeout for API, 30s for downloads
 """
 
 import machine

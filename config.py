@@ -1,5 +1,39 @@
 """
 Configuration for Pico 2W MQTT Client
+
+This module contains all configuration constants for the project.
+Configuration is separated into groups:
+
+MQTT Configuration:
+    - MQTT_BROKER, MQTT_PORT, MQTT_USER, MQTT_PASSWORD: Broker connection
+    - MQTT_SSL: Enable/disable SSL/TLS
+    - TOPIC_*: MQTT topic definitions for Home Assistant
+
+Device Configuration:
+    - DEVICE_NAME, DEVICE_IDENTIFIER: Device identification
+    - INTERNAL_TEMP_ADC_PIN: RP2350 internal temperature sensor
+
+Sensor Configuration:
+    - DS18B20_PIN: GPIO pin for DS18B20 sensors
+    - ISNS20_CS_PIN, ISNS20_SPI_PORT: ISNS20 current sensor
+    - ISNS20_SPI*_PINS: SPI pin definitions for ISNS20
+
+Timing Configuration:
+    - SENSOR_UPDATE_INTERVAL_MS: How often to read sensors
+    - SENSOR_RETRY_INTERVAL_MS: Sensor reconnection retry interval
+    - TEMP_CONVERSION_TIME_MS: DS18B20 conversion time
+    - MQTT_DELAY_*: MQTT operation delays
+    - ERROR_DELAY_*: Error handling delays
+
+Update Configuration:
+    - SD_SCK_PIN, SD_MOSI_PIN, SD_MISO_PIN, SD_CS_PIN: SD card pins
+    - UPDATE_BUTTON_PIN: GPIO pin for rollback trigger
+    - GITHUB_OWNER, GITHUB_REPO: GitHub repository for OTA updates
+
+Secrets:
+    WiFi and MQTT credentials are loaded from secrets.py.
+    Copy config.py to secrets.py and fill in your credentials.
+    Ensure secrets.py is in .gitignore to avoid committing credentials.
 """
 
 # MQTT Configuration
@@ -37,7 +71,17 @@ INTERNAL_TEMP_ADC_PIN = 4  # RP2350 internal temperature sensor (ADC4)
 
 # ISNS20 Current Sensor Configuration
 ISNS20_CS_PIN = 8  # GPIO pin for ISNS20 chip select
-ISNS20_SPI_PORT = 0  # SPI port 0 (SCK=GP2, MOSI=GP3, MISO=GP4)
+ISNS20_SPI_PORT = 0  # SPI port 0 or 1
+
+# ISNS20 SPI0 Pins (used when ISNS20_SPI_PORT = 0)
+ISNS20_SPI0_SCK_PIN = 2
+ISNS20_SPI0_MOSI_PIN = 3
+ISNS20_SPI0_MISO_PIN = 4
+
+# ISNS20 SPI1 Pins (used when ISNS20_SPI_PORT = 1)
+ISNS20_SPI1_SCK_PIN = 10
+ISNS20_SPI1_MOSI_PIN = 11
+ISNS20_SPI1_MISO_PIN = 12
 
 # Timing
 SENSOR_UPDATE_INTERVAL_MS = 1000

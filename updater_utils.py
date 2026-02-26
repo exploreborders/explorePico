@@ -1,6 +1,44 @@
 """
 Shared Updater Utilities for Pico 2W
-Common functions for SD Card and GitHub updaters
+
+Common functions for SD Card and GitHub updaters including:
+    - Version management (read/write/compare)
+    - Backup and restore functionality
+    - Rollback detection and execution
+    - Logging utilities
+
+Version Management:
+    - read_version(): Read current firmware version
+    - write_version(): Write new firmware version
+    - parse_version(): Parse version string to tuple
+    - compare_versions(): Compare two version strings
+
+Backup/Restore:
+    - create_backup(): Backup all Python files before update
+    - restore_backup(): Restore files from backup
+    - cleanup_backup(): Remove backup folder
+    - copy_file_content(): Write file with directory creation
+
+Rollback:
+    - detect_rollback_trigger(): Check for double-button press
+    - perform_rollback(): Execute rollback from backup
+
+Notes:
+    - Version stored in /.version file
+    - Backup stored in /backup folder
+    - secrets.py is excluded from backup (credentials)
+    - Only .py files are backed up
+
+Logger:
+    - set_logger(): Configure logging function
+    - log(): Log message with optional tag
+
+Usage:
+    from updater_utils import log, set_logger
+
+    set_logger(my_log_function, "TAG")
+    log("message")  # Uses default tag
+    log("TAG", "message")  # Uses custom tag
 """
 
 import machine

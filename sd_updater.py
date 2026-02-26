@@ -1,6 +1,47 @@
 """
 SD Card Updater for Pico 2W
-Auto-detects SD card with valid update files at boot.
+
+Auto-detects SD card with valid update files at boot and performs
+firmware updates without needing a computer.
+
+Update Process:
+    1. Check for SD card with update folder
+    2. Read version.txt to get new version number
+    3. Compare with current version
+    4. If newer, backup current firmware
+    5. Copy new .py files from SD card
+    6. Reboot to apply changes
+
+SD Card Structure:
+    /sd/update/
+        version.txt    - New version number (e.g., "1.2.0")
+        main.py        - Updated main application
+        config.py      - Updated configuration
+        ...            - Other .py files
+
+Rollback:
+    If update fails, automatically restores from backup.
+    Manual rollback: Press update button twice within 2 seconds at boot.
+
+Hardware:
+    SD card connected via SPI:
+    - SCK: GPIO14 (configurable)
+    - MOSI: GPIO15 (configurable)
+    - MISO: GPIO12 (configurable)
+    - CS: GPIO13 (configurable)
+
+Usage:
+    1. Create update folder on SD card
+    2. Add version.txt with new version
+    3. Add updated .py files
+    4. Insert SD card into Pico
+    5. Reset Pico - update applies automatically
+
+Notes:
+    - Only .py files are updated
+    - secrets.py is never overwritten
+    - Current firmware backed up before update
+    - Automatic rollback on failure
 """
 
 import machine

@@ -1,6 +1,39 @@
 """
 Raspberry Pi Pico 2W - Home Assistant MQTT Integration
-Clean, modular version with proper error handling
+
+This is the main application that connects a Raspberry Pi Pico 2W to Home Assistant
+via MQTT. It reads temperature and current sensors and publishes the data to MQTT
+topics that Home Assistant automatically discovers.
+
+Features:
+    - MQTT integration with Home Assistant auto-discovery
+    - DS18B20 temperature sensor support (multiple sensors on single GPIO)
+    - ISNS20 current sensor support via SPI
+    - Internal RP2350 temperature sensor
+    - OTA firmware updates via GitHub releases or SD card
+    - LED control via MQTT
+    - Device availability tracking (online/offline)
+    - Automatic reconnection on network failure
+
+Hardware:
+    - Raspberry Pi Pico 2W (RP2350)
+    - DS18B20 temperature sensors on GPIO22 (configurable)
+    - Pmod ISNS20 current sensor on SPI0 (configurable)
+
+Usage:
+    Upload all .py files to Pico and reset.
+    The device will:
+    1. Connect to WiFi
+    2. Check for firmware updates (GitHub or SD card)
+    3. Connect to MQTT broker
+    4. Publish auto-discovery configs to Home Assistant
+    5. Start publishing sensor data
+
+    Sensors will automatically appear in Home Assistant.
+
+Environment:
+    MicroPython for Raspberry Pi Pico 2W
+    Requires: umqtt.simple, onewire, ds18x20, sdcard
 """
 
 # -----------------------------------------------------------------------------

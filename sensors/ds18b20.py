@@ -1,3 +1,46 @@
+"""
+DS18B20 Temperature Sensor Driver for Pico 2W
+
+Hardware:
+    - Sensor: DS18B20 one-wire digital temperature sensor
+    - Pin: GPIO22 (configurable via DS18B20_PIN in config.py)
+    - Power: Parasitic power or external 3.3V/5V
+    - Bus: One-wire communication protocol
+    - Max sensors: ~10 on single bus (practical limit)
+
+Features:
+    - Multi-sensor support (automatic detection)
+    - Non-blocking conversion (doesn't block main loop)
+    - Hot-swap support (detects sensors added/removed)
+    - 85°C filter (power-on reset value)
+
+Technical:
+    - Resolution: 9-12 bits (configurable)
+    - Conversion time: 94ms (9-bit) to 750ms (12-bit)
+    - Accuracy: ±0.5°C from -10°C to +85°C
+    - Range: -55°C to +125°C
+
+Usage:
+    from sensors import DS18B20, DS18B20Manager
+    from config import DS18B20_PIN, TEMP_CONVERSION_TIME_MS
+
+    # Create sensor and manager
+    sensor = DS18B20(DS18B20_PIN)
+    manager = DS18B20Manager(sensor, "DS18B20", retry_interval_ms=60000)
+
+    # In main loop
+    temps = manager.read(TEMP_CONVERSION_TIME_MS)
+    if temps:
+        for temp in temps:
+            print(f"Temperature: {temp}°C")
+
+Notes:
+    - Multiple sensors auto-detected on same pin
+    - First sensor = room temperature (index 0)
+    - Second sensor = water temperature (index 1)
+    - Uses non-blocking pattern: start_conversion() then read() after delay
+"""
+
 import time
 from machine import Pin
 from onewire import OneWire

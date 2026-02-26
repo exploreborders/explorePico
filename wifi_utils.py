@@ -1,6 +1,28 @@
 """
 WiFi Utilities for Pico 2W
-Shared WiFi connection functions
+
+Shared WiFi connection functions for connecting to wireless networks.
+Provides both low-level and high-level connection APIs.
+
+Functions:
+    get_wlan(): Get the WLAN station interface
+    is_connected(): Check if WiFi is connected
+    connect(): Connect to WiFi with retry logic
+
+Usage:
+    from wifi_utils import connect, is_connected
+
+    # Check connection
+    if is_connected():
+        print("Connected!")
+
+    # Connect with callbacks
+    connect("MyNetwork", "password", log_fn=log, blink_fn=blink)
+
+Notes:
+    - Uses network.WLAN(network.STA_IF) for station mode
+    - Default timeout is 30 seconds
+    - Optional log_fn and blink_fn for feedback
 """
 
 import network

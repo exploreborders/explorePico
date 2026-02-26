@@ -1,15 +1,85 @@
+"""
+ISNS20 Current Sensor Driver for Pico 2W
+
+Hardware:
+    - Sensor: Digilent Pmod ISNS20 (Current Sensor)
+    - Interface: SPI (12-bit ADC)
+    - Chip: Texas Instruments INA219
+    - CS Pin: GPIO8 (configurable)
+    - SPI Port: 0 or 1 (configurable)
+
+Features:
+    - Bidirectional current measurement
+    - Moving average filter (10 samples)
+    - Configurable via config.py
+
+Technical:
+    - Sensitivity: 66 mV/A
+    - ADC Resolution: 12-bit (4096 levels)
+    - Reference Voltage: 1.65V (mid-scale)
+    - Input Range: -3A to +3A (or 0-3A depending on configuration)
+    - SPI Speed: 1 MHz
+
+Hardware Connection (SPI0):
+    - SCK: GPIO2
+    - MOSI: GPIO3
+    - MISO: GPIO4
+    - CS: GPIO8
+
+Usage:
+    from sensors import ISNS20, ISNS20Manager
+    from config import ISNS20_CS_PIN, ISNS20_SPI_PORT
+
+    # Create sensor and manager
+    sensor = ISNS20(ISNS20_CS_PIN, ISNS20_SPI_PORT)
+    manager = ISNS20Manager(sensor, "ISNS20", retry_interval_ms=60000)
+
+    # In main loop
+    current = manager.read()
+    if current is not None:
+        print(f"Current: {current}A")
+
+Calculation:
+    voltage = (adc_value / 4095) * 3.3
+    current = (voltage - 1.65) / 0.066
+
+Notes:
+    - Requires SPI peripheral
+    - Uses moving average for stable readings
+    - Falls back to last known value on read failure
+    - 85.0°C reading is invalid (sensor disconnected)
+"""
+
 import time
 from machine import Pin, SPI
+
+try:
+    from config import (
+        ISNS20_CS_PIN,
+        ISNS20_SPI_PORT,
+        ISNS20_SPI0_SCK_PIN,
+        ISNS20_SPI0_MOSI_PIN,
+        ISNS20_SPI0_MISO_PIN,
+        ISNS20_SPI1_SCK_PIN,
+        ISNS20_SPI1_MOSI_PIN,
+        ISNS20_SPI1_MISO_PIN,
+    )
+except ImportError:
+    # Fallback defaults (for development without config)
+    ISNS20_CS_PIN = 8
+    ISNS20_SPI_PORT = 0
+    ISNS20_SPI0_SCK_PIN = 2
+    ISNS20_SPI0_MOSI_PIN = 3
+    ISNS20_SPI0_MISO_PIN = 4
+    ISNS20_SPI1_SCK_PIN = 10
+    ISNS20_SPI1_MOSI_PIN = 11
+    ISNS20_SPI1_MISO_PIN = 12
 
 
 class ISNS20:
     """Pmod ISNS20 current sensor driver using SPI."""
 
     def __init__(self, cs_pin: int, spi_port: int = 0) -> None:
-        self.cs_pin_num = cs_pin
-        self.spi_port = spi_port
-        self.cs = None
-        self.spi = None
         self.last_value: float | None = None
         self._initialized = False
         self._raw_buffer = []
@@ -18,9 +88,9 @@ class ISNS20:
     def init(self) -> bool:
         """Initialize SPI and verify sensor communication."""
         try:
-            self.cs = Pin(self.cs_pin_num, Pin.OUT, value=1)
+            self.cs = Pin(ISNS20_CS_PIN, Pin.OUT, value=1)
 
-            if self.spi_port == 0:
+            if ISNS20_SPI_PORT == 0:
                 self.spi = SPI(
                     0,
                     baudrate=1_000_000,
@@ -28,9 +98,9 @@ class ISNS20:
                     phase=1,
                     bits=8,
                     firstbit=SPI.MSB,
-                    sck=Pin(2),
-                    mosi=Pin(3),
-                    miso=Pin(4),
+                    sck=Pin(ISNS20_SPI0_SCK_PIN),
+                    mosi=Pin(ISNS20_SPI0_MOSI_PIN),
+                    miso=Pin(ISNS20_SPI0_MISO_PIN),
                 )
             else:
                 self.spi = SPI(
@@ -40,15 +110,15 @@ class ISNS20:
                     phase=1,
                     bits=8,
                     firstbit=SPI.MSB,
-                    sck=Pin(10),
-                    mosi=Pin(11),
-                    miso=Pin(12),
+                    sck=Pin(ISNS20_SPI1_SCK_PIN),
+                    mosi=Pin(ISNS20_SPI1_MOSI_PIN),
+                    miso=Pin(ISNS20_SPI1_MISO_PIN),
                 )
 
             test_read = self._read_raw()
             if test_read is not None:
                 self._initialized = True
-                print(f"[ISNS20] Initialized on CS pin GP{self.cs_pin_num}")
+                print(f"[ISNS20] Initialized on CS pin GP{ISNS20_CS_PIN}")
                 return True
 
             print("[ISNS20] No response from sensor")
@@ -92,7 +162,7 @@ class ISNS20:
         if len(self._raw_buffer) > self._buffer_size:
             self._raw_buffer.pop(0)
 
-        avg_raw = sum(self._raw_buffer) // len(self._raw_buffer)
+        avg_raw = sum(self._raw_buffer) / len(self._raw_buffer)
 
         try:
             voltage = (avg_raw / 4095.0) * 3.3
