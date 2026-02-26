@@ -47,14 +47,14 @@ def connect(
     for _ in range(timeout):
         if wlan.isconnected():
             if blink_fn:
-                blink_fn("111")
+                blink_fn("1010")
             if log_fn:
                 log_fn("WiFi", f"Connected! IP: {wlan.ifconfig()[0]}")
             return True
         time.sleep(1)
 
     if blink_fn:
-        blink_fn("1000")
+        blink_fn("111")
     if log_fn:
         log_fn("WiFi", "Failed to connect")
     return False

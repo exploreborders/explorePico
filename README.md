@@ -44,15 +44,14 @@ MicroPython project for Raspberry Pi Pico 2W that integrates with Home Assistant
 Connect both DS18B20 sensors to the same GPIO using a single pull-up resistor:
 
 ```
-                    4.7kΩ
- Pico GP22 ────────┬───────┬─────── DQ (yellow/white)
-                    │       │
-                   GND    GND
-                    │       │
-                   VDD    VDD
-                  (red)  (red)
-                   
-           3V3 ────────┴───────┘
+Pico GP22 ────────[4.7kΩ]─────── VCC (3.3V)
+                  │
+        ┌─────────┴─────────┐
+        │                   │
+       DQ                  DQ
+    Sensor 1            Sensor 2
+    (red) VCC          (red) VCC
+    (black) GND        (black) GND
 ```
 
 All sensors share:
@@ -78,7 +77,7 @@ All sensors share:
 | One leg | GP10 |
 | Other leg | GND |
 
-The button is used for rollback (double-press). Update is automatic when SD card is inserted.
+The button is checked during boot (after WiFi connects). Double-press within 2 seconds to trigger rollback.
 
 ## Installation
 
@@ -192,17 +191,17 @@ The SD Card Updater automatically detects an SD card with valid update files at 
    - Watch the LED for success/failure
 
 4. **Verify:**
-   - LED "111" = success, Pico will reboot with new code
-   - LED "000" = failed, Pico will boot with old code
+   - LED "11011" = success, Pico will reboot with new code
+   - LED "111" = failed, Pico will boot with old code
 
 ### Rolling Back
 
 If something goes wrong, you can restore the previous version:
 
-1. Power off the Pico
-2. Hold the button on GP10
+1. Power on the Pico normally
+2. Wait for boot sequence (WiFi connects)
 3. Press button **twice** within 2 seconds
-4. Watch the LED for "1010" (success) or "000" (failed)
+4. Watch the LED for "11011" (success) or "111" (failed)
 
 ### Safety Features
 
@@ -245,7 +244,7 @@ Boot
 
 ### Setup
 
-1. **Make repo public** (already done)
+1. **Make repo public**
 2. **Create GitHub releases** with version tags (e.g., v1.7)
 3. **Attach files** to release:
    - main.py
@@ -276,7 +275,6 @@ Edit `config.py` to set your GitHub repo:
 ```python
 GITHUB_OWNER = "exploreborders"
 GITHUB_REPO = "explorePico"
-GITHUB_CHECK_ON_BOOT = True
 ```
 
 ### Update Flow
@@ -363,7 +361,7 @@ The device is automatically discovered via MQTT discovery. After running, you sh
 
 ```
 secondTest/
-├── boot.py              # Entry point with GitHub & SD update check
+├── boot.py             # Entry point with GitHub & SD update check
 ├── github_updater.py   # GitHub WiFi updater
 ├── sd_updater.py       # SD card updater
 ├── blink.py            # Shared LED blink utilities
