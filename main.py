@@ -41,6 +41,7 @@ from config import (
     TOPIC_WATER_TEMP_CONFIG,
     TOPIC_CURRENT_STATE,
     TOPIC_CURRENT_CONFIG,
+    TOPIC_AVAILABILITY,
     DEVICE_NAME,
     DEVICE_IDENTIFIER,
     INTERNAL_TEMP_ADC_PIN,
@@ -139,6 +140,7 @@ def get_temp_config() -> dict:
         "unique_id": "pico_temp",
         "state_topic": TOPIC_TEMP_STATE,
         "unit_of_measurement": "C",
+        "availability_topic": TOPIC_AVAILABILITY,
         "device": get_device_info(),
     }
 
@@ -150,6 +152,7 @@ def get_room_temp_config() -> dict:
         "unique_id": "pico_room_temp",
         "state_topic": TOPIC_ROOM_TEMP_STATE,
         "unit_of_measurement": "C",
+        "availability_topic": TOPIC_AVAILABILITY,
         "device": get_device_info(),
     }
 
@@ -161,6 +164,7 @@ def get_water_temp_config() -> dict:
         "unique_id": "pico_water_temp",
         "state_topic": TOPIC_WATER_TEMP_STATE,
         "unit_of_measurement": "C",
+        "availability_topic": TOPIC_AVAILABILITY,
         "device": get_device_info(),
     }
 
@@ -173,6 +177,7 @@ def get_current_config() -> dict:
         "state_topic": TOPIC_CURRENT_STATE,
         "unit_of_measurement": "A",
         "device_class": "current",
+        "availability_topic": TOPIC_AVAILABILITY,
         "device": get_device_info(),
     }
 
@@ -286,6 +291,7 @@ def create_mqtt_client() -> MQTTClient:
         ssl=MQTT_SSL,
     )
 
+    client.set_last_will(TOPIC_AVAILABILITY, "offline", retain=True, qos=1)
     client.set_callback(on_message)
 
     return client
@@ -301,6 +307,7 @@ def connect_mqtt() -> bool:
     try:
         mqtt_client = create_mqtt_client()
         mqtt_client.connect()
+        mqtt_client.publish(TOPIC_AVAILABILITY, "online", retain=True)
         log("MQTT", "Connected!")
 
         time.sleep(1)

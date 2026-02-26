@@ -26,6 +26,9 @@ TOPIC_WATER_TEMP_CONFIG = "homeassistant/sensor/pico/water_temp/config"
 TOPIC_CURRENT_STATE = "homeassistant/sensor/pico/current"
 TOPIC_CURRENT_CONFIG = "homeassistant/sensor/pico/current/config"
 
+# Device availability topic (for last-will and birth message)
+TOPIC_AVAILABILITY = "homeassistant/sensor/pico/availability"
+
 # DS18B20 Configuration
 DS18B20_PIN = 22  # GPIO pin for DS18B20 temperature sensors (supports multiple)
 
