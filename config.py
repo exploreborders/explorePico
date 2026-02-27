@@ -70,6 +70,7 @@ DS18B20_PIN = 22  # GPIO pin for DS18B20 temperature sensors (supports multiple)
 INTERNAL_TEMP_ADC_PIN = 4  # RP2350 internal temperature sensor (ADC4)
 
 # ISNS20 Current Sensor Configuration
+ENABLE_ISNS20 = False  # Set to False if ISNS20 sensor is not connected
 ISNS20_CS_PIN = 8  # GPIO pin for ISNS20 chip select
 ISNS20_SPI_PORT = 0  # SPI port 0 or 1
 

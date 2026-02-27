@@ -11,7 +11,7 @@ MicroPython project for Raspberry Pi Pico 2W integrating with Home Assistant via
 ```
 secondTest/
 ├── main.py            # Main application (MQTT client)
-├── boot.py           # Entry point - handles updates before launching main
+├── app.py            # Entry point - handles updates before launching main
 ├── config.py         # Configuration (pins, MQTT topics, timing)
 ├── secrets.py        # WiFi/MQTT credentials (NOT committed)
 ├── wifi_utils.py     # Shared WiFi connection utilities
@@ -41,7 +41,7 @@ ruff check main.py        # Single file
 ### Upload to Pico (MicroPico)
 ```bash
 micropico connect
-%send boot.py
+%send app.py
 %send sd_updater.py
 %send github_updater.py
 %send blink.py
@@ -113,8 +113,8 @@ def log(tag: str, message: str | None = None) -> None:
 
 ### Shared Logger
 ```python
-# In boot.py - set logger once at startup
-set_logger(lambda tag, msg: print(f"[{tag}] {msg}"), "BOOT")
+# In app.py - set logger once at startup
+set_logger(lambda tag, msg: print(f"[{tag}] {msg}"), "APP")
 
 # Anywhere - use shared log function
 from updater_utils import log

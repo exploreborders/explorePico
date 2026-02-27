@@ -108,7 +108,7 @@ MQTT_PASSWORD = "mqtt_password"
 Using MicroPico (VS Code extension):
 ```bash
 micropico connect
-%send boot.py
+%send app.py
 %send sd_updater.py
 %send github_updater.py
 %send blink.py
@@ -122,7 +122,7 @@ micropico connect
 
 Or using mpremote:
 ```bash
-mpremote cp boot.py :
+mpremote cp app.py :
 mpremote cp sd_updater.py :
 mpremote cp github_updater.py :
 mpremote cp blink.py :
@@ -136,7 +136,9 @@ mpremote cp -r sensors/ :
 
 ### 4. Run
 
-The Pico will automatically run `boot.py` on power-up, which then runs `main.py`.
+The Pico will automatically run `app.py` (or `boot.py` if renamed) on power-up, which then runs `main.py`.
+
+> Note: For development, use `app.py` to avoid auto-execution. Rename to `boot.py` for production auto-start.
 
 ## SD Card Code Updater
 
@@ -249,7 +251,7 @@ Boot
 3. **Attach files** to release:
    - main.py
    - config.py
-   - boot.py
+   - app.py (or boot.py if renamed)
    - blink.py
    - wifi_utils.py
    - updater_utils.py
@@ -361,7 +363,7 @@ The device is automatically discovered via MQTT discovery. After running, you sh
 
 ```
 secondTest/
-├── boot.py             # Entry point with GitHub & SD update check
+├── app.py             # Entry point with GitHub & SD update check
 ├── github_updater.py   # GitHub WiFi updater
 ├── sd_updater.py       # SD card updater
 ├── blink.py            # Shared LED blink utilities

@@ -60,6 +60,7 @@ from config import (
     MQTT_PASSWORD,
     MQTT_SSL,
     DS18B20_PIN,
+    ENABLE_ISNS20,
     ISNS20_CS_PIN,
     ISNS20_SPI_PORT,
     SENSOR_UPDATE_INTERVAL_MS,
@@ -91,7 +92,6 @@ from config import (
     INTERNAL_TEMP_ADC_PIN,
 )
 
-
 # -----------------------------------------------------------------------------
 # CONSTANTS & GLOBAL STATE
 # -----------------------------------------------------------------------------
@@ -103,11 +103,15 @@ MQTT_CLIENT_ID = f"pico_{uid}"
 # Sensor objects
 temp_sensor = machine.ADC(INTERNAL_TEMP_ADC_PIN)
 temp_sensors = DS18B20Manager(DS18B20(DS18B20_PIN), "DS18B20", SENSOR_RETRY_INTERVAL_MS)
-current_sensor = ISNS20Manager(
-    ISNS20(ISNS20_CS_PIN, ISNS20_SPI_PORT), "ISNS20", SENSOR_RETRY_INTERVAL_MS
-)
 temp_sensors.set_logger(log)
-current_sensor.set_logger(log)
+
+current_sensor = None
+if ENABLE_ISNS20:
+    current_sensor = ISNS20Manager(
+        ISNS20(ISNS20_CS_PIN, ISNS20_SPI_PORT), "ISNS20", SENSOR_RETRY_INTERVAL_MS
+    )
+    current_sensor.set_logger(log)
+
 led.off()
 
 # MQTT state
@@ -282,22 +286,28 @@ SENSOR_REGISTRY = [
         "sensor_manager": temp_sensors,
         "needs_unavailable": True,
     },
-    {
-        "name": "current",
-        "read_func": current_sensor.read,
-        "state_topic": TOPIC_CURRENT_STATE,
-        "sensor_manager": current_sensor,
-        "needs_unavailable": True,
-    },
 ]
+
+if ENABLE_ISNS20 and current_sensor is not None:
+    SENSOR_REGISTRY.append(
+        {
+            "name": "current",
+            "read_func": current_sensor.read,
+            "state_topic": TOPIC_CURRENT_STATE,
+            "sensor_manager": current_sensor,
+            "needs_unavailable": True,
+        }
+    )
 
 DISCOVERY_REGISTRY = [
     (TOPIC_LED_CONFIG, get_led_config),
     (TOPIC_TEMP_CONFIG, get_temp_config),
     (TOPIC_ROOM_TEMP_CONFIG, get_room_temp_config),
     (TOPIC_WATER_TEMP_CONFIG, get_water_temp_config),
-    (TOPIC_CURRENT_CONFIG, get_current_config),
 ]
+
+if ENABLE_ISNS20:
+    DISCOVERY_REGISTRY.append((TOPIC_CURRENT_CONFIG, get_current_config))
 
 
 # -----------------------------------------------------------------------------

@@ -28,9 +28,6 @@ import sys
 from wifi_utils import connect
 from updater_utils import set_logger, log
 
-
-set_logger(lambda tag, msg: print(f"[{tag}] {msg}"), "BOOT")
-
 try:
     from config import (
         GITHUB_OWNER,
