@@ -8,7 +8,7 @@ topics that Home Assistant automatically discovers.
 Features:
     - MQTT integration with Home Assistant auto-discovery
     - DS18B20 temperature sensor support (multiple sensors on single GPIO)
-    - ISNS20 current sensor support via SPI
+    - ACS37030 current sensor support (5 sensors via ADS1115 I2C)
     - Internal RP2350 temperature sensor
     - OTA firmware updates via GitHub releases or SD card
     - LED control via MQTT
@@ -18,7 +18,7 @@ Features:
 Hardware:
     - Raspberry Pi Pico 2W (RP2350)
     - DS18B20 temperature sensors on GPIO22 (configurable)
-    - Pmod ISNS20 current sensor on SPI0 (configurable)
+    - ACS37030LLZATR-020B3 current sensors (5x) via ADS1115 I2C + Pico ADC
 
 Usage:
     Upload all .py files to Pico and reset.
@@ -49,7 +49,8 @@ import micropython
 from blink import blink_pattern, led
 from wifi_utils import connect, is_connected
 from updater_utils import log
-from sensors import DS18B20, DS18B20Manager, ISNS20, ISNS20Manager
+from sensors import DS18B20, DS18B20Manager, ACS37030, ACS37030Manager
+from sensors.ads1115 import ADS1115
 
 from config import (
     WIFI_SSID,
@@ -60,9 +61,13 @@ from config import (
     MQTT_PASSWORD,
     MQTT_SSL,
     DS18B20_PIN,
-    ENABLE_ISNS20,
-    ISNS20_CS_PIN,
-    ISNS20_SPI_PORT,
+    ENABLE_ACS37030,
+    ACS37030_I2C_ADDRESS,
+    ACS37030_I2C_SCL_PIN,
+    ACS37030_I2C_SDA_PIN,
+    ACS37030_SENSITIVITY,
+    ACS37030_ZERO_POINT,
+    ACS37030_NUM_SENSORS,
     SENSOR_UPDATE_INTERVAL_MS,
     RECONNECT_DELAY_S,
     TEMP_CONVERSION_TIME_MS,
@@ -84,8 +89,16 @@ from config import (
     TOPIC_ROOM_TEMP_CONFIG,
     TOPIC_WATER_TEMP_STATE,
     TOPIC_WATER_TEMP_CONFIG,
-    TOPIC_CURRENT_STATE,
-    TOPIC_CURRENT_CONFIG,
+    TOPIC_CURRENT_1_STATE,
+    TOPIC_CURRENT_1_CONFIG,
+    TOPIC_CURRENT_2_STATE,
+    TOPIC_CURRENT_2_CONFIG,
+    TOPIC_CURRENT_3_STATE,
+    TOPIC_CURRENT_3_CONFIG,
+    TOPIC_CURRENT_4_STATE,
+    TOPIC_CURRENT_4_CONFIG,
+    TOPIC_CURRENT_5_STATE,
+    TOPIC_CURRENT_5_CONFIG,
     TOPIC_AVAILABILITY,
     DEVICE_NAME,
     DEVICE_IDENTIFIER,
@@ -105,12 +118,44 @@ temp_sensor = machine.ADC(INTERNAL_TEMP_ADC_PIN)
 temp_sensors = DS18B20Manager(DS18B20(DS18B20_PIN), "DS18B20", SENSOR_RETRY_INTERVAL_MS)
 temp_sensors.set_logger(log)
 
-current_sensor = None
-if ENABLE_ISNS20:
-    current_sensor = ISNS20Manager(
-        ISNS20(ISNS20_CS_PIN, ISNS20_SPI_PORT), "ISNS20", SENSOR_RETRY_INTERVAL_MS
+# ACS37030 current sensors (via ADS1115 I2C or Pico ADC)
+ads1115 = None
+current_sensors = []
+
+if ENABLE_ACS37030:
+    ads1115 = ADS1115(
+        address=ACS37030_I2C_ADDRESS,
+        scl_pin=ACS37030_I2C_SCL_PIN,
+        sda_pin=ACS37030_I2C_SDA_PIN,
     )
-    current_sensor.set_logger(log)
+    ads1115.init()
+
+    # Create sensors for ADS1115 channels 0-3 (first 4 sensors)
+    for i in range(min(ACS37030_NUM_SENSORS, 4)):
+        sensor = ACS37030(
+            ads1115,
+            channel=i,
+            sensitivity=ACS37030_SENSITIVITY,
+            zero_point=ACS37030_ZERO_POINT,
+            is_pico_adc=False,
+        )
+        manager = ACS37030Manager(sensor, f"ACS37030_{i + 1}", SENSOR_RETRY_INTERVAL_MS)
+        manager.set_logger(log)
+        current_sensors.append(manager)
+
+    # Create 5th sensor using Pico's built-in ADC (if we need 5)
+    if ACS37030_NUM_SENSORS >= 5:
+        pico_adc = machine.ADC(26)  # GP26 = ADC0
+        sensor = ACS37030(
+            pico_adc,
+            channel=0,
+            sensitivity=ACS37030_SENSITIVITY,
+            zero_point=ACS37030_ZERO_POINT,
+            is_pico_adc=True,
+        )
+        manager = ACS37030Manager(sensor, "ACS37030_5", SENSOR_RETRY_INTERVAL_MS)
+        manager.set_logger(log)
+        current_sensors.append(manager)
 
 led.off()
 
@@ -247,12 +292,23 @@ def get_water_temp_config() -> dict:
     }
 
 
-def get_current_config() -> dict:
+# ACS37030 current sensor configs (5 sensors)
+CURRENT_TOPICS = [
+    (TOPIC_CURRENT_1_STATE, TOPIC_CURRENT_1_CONFIG, "Pico Current 1", "pico_current_1"),
+    (TOPIC_CURRENT_2_STATE, TOPIC_CURRENT_2_CONFIG, "Pico Current 2", "pico_current_2"),
+    (TOPIC_CURRENT_3_STATE, TOPIC_CURRENT_3_CONFIG, "Pico Current 3", "pico_current_3"),
+    (TOPIC_CURRENT_4_STATE, TOPIC_CURRENT_4_CONFIG, "Pico Current 4", "pico_current_4"),
+    (TOPIC_CURRENT_5_STATE, TOPIC_CURRENT_5_CONFIG, "Pico Current 5", "pico_current_5"),
+]
+
+
+def get_current_config(index: int) -> dict:
     """Return current sensor config for Home Assistant discovery."""
+    state_topic, config_topic, name, unique_id = CURRENT_TOPICS[index]
     return {
-        "name": "Pico Current",
-        "unique_id": "pico_current",
-        "state_topic": TOPIC_CURRENT_STATE,
+        "name": name,
+        "unique_id": unique_id,
+        "state_topic": state_topic,
         "unit_of_measurement": "A",
         "device_class": "current",
         "availability_topic": TOPIC_AVAILABILITY,
@@ -288,16 +344,19 @@ SENSOR_REGISTRY = [
     },
 ]
 
-if ENABLE_ISNS20 and current_sensor is not None:
-    SENSOR_REGISTRY.append(
-        {
-            "name": "current",
-            "read_func": current_sensor.read,
-            "state_topic": TOPIC_CURRENT_STATE,
-            "sensor_manager": current_sensor,
-            "needs_unavailable": True,
-        }
-    )
+# Add ACS37030 current sensors
+if ENABLE_ACS37030 and current_sensors:
+    for i, sensor_manager in enumerate(current_sensors):
+        state_topic, config_topic, _, _ = CURRENT_TOPICS[i]
+        SENSOR_REGISTRY.append(
+            {
+                "name": f"current_{i + 1}",
+                "read_func": sensor_manager.read,
+                "state_topic": state_topic,
+                "sensor_manager": sensor_manager,
+                "needs_unavailable": True,
+            }
+        )
 
 DISCOVERY_REGISTRY = [
     (TOPIC_LED_CONFIG, get_led_config),
@@ -306,8 +365,11 @@ DISCOVERY_REGISTRY = [
     (TOPIC_WATER_TEMP_CONFIG, get_water_temp_config),
 ]
 
-if ENABLE_ISNS20:
-    DISCOVERY_REGISTRY.append((TOPIC_CURRENT_CONFIG, get_current_config))
+# Add ACS37030 current sensor discovery configs
+if ENABLE_ACS37030:
+    for i in range(len(current_sensors)):
+        _, config_topic, _, _ = CURRENT_TOPICS[i]
+        DISCOVERY_REGISTRY.append((config_topic, lambda idx=i: get_current_config(idx)))
 
 
 # -----------------------------------------------------------------------------

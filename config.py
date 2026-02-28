@@ -15,8 +15,8 @@ Device Configuration:
 
 Sensor Configuration:
     - DS18B20_PIN: GPIO pin for DS18B20 sensors
-    - ISNS20_CS_PIN, ISNS20_SPI_PORT: ISNS20 current sensor
-    - ISNS20_SPI*_PINS: SPI pin definitions for ISNS20
+    - ACS37030_I2C_*: ADS1115 I2C configuration for ACS37030 sensors
+    - ACS37030_NUM_SENSORS: Number of ACS37030 sensors (max 5)
 
 Timing Configuration:
     - SENSOR_UPDATE_INTERVAL_MS: How often to read sensors
@@ -57,8 +57,17 @@ TOPIC_ROOM_TEMP_CONFIG = "homeassistant/sensor/pico/room_temp/config"
 TOPIC_WATER_TEMP_STATE = "homeassistant/sensor/pico/water_temp"
 TOPIC_WATER_TEMP_CONFIG = "homeassistant/sensor/pico/water_temp/config"
 
-TOPIC_CURRENT_STATE = "homeassistant/sensor/pico/current"
-TOPIC_CURRENT_CONFIG = "homeassistant/sensor/pico/current/config"
+# ACS37030 Current Sensors (5 sensors)
+TOPIC_CURRENT_1_STATE = "homeassistant/sensor/pico/current_1"
+TOPIC_CURRENT_1_CONFIG = "homeassistant/sensor/pico/current_1/config"
+TOPIC_CURRENT_2_STATE = "homeassistant/sensor/pico/current_2"
+TOPIC_CURRENT_2_CONFIG = "homeassistant/sensor/pico/current_2/config"
+TOPIC_CURRENT_3_STATE = "homeassistant/sensor/pico/current_3"
+TOPIC_CURRENT_3_CONFIG = "homeassistant/sensor/pico/current_3/config"
+TOPIC_CURRENT_4_STATE = "homeassistant/sensor/pico/current_4"
+TOPIC_CURRENT_4_CONFIG = "homeassistant/sensor/pico/current_4/config"
+TOPIC_CURRENT_5_STATE = "homeassistant/sensor/pico/current_5"
+TOPIC_CURRENT_5_CONFIG = "homeassistant/sensor/pico/current_5/config"
 
 # Device availability topic (for last-will and birth message)
 TOPIC_AVAILABILITY = "homeassistant/sensor/pico/availability"
@@ -69,20 +78,15 @@ DS18B20_PIN = 22  # GPIO pin for DS18B20 temperature sensors (supports multiple)
 # Internal Temperature Sensor
 INTERNAL_TEMP_ADC_PIN = 4  # RP2350 internal temperature sensor (ADC4)
 
-# ISNS20 Current Sensor Configuration
-ENABLE_ISNS20 = False  # Set to False if ISNS20 sensor is not connected
-ISNS20_CS_PIN = 8  # GPIO pin for ISNS20 chip select
-ISNS20_SPI_PORT = 0  # SPI port 0 or 1
-
-# ISNS20 SPI0 Pins (used when ISNS20_SPI_PORT = 0)
-ISNS20_SPI0_SCK_PIN = 2
-ISNS20_SPI0_MOSI_PIN = 3
-ISNS20_SPI0_MISO_PIN = 4
-
-# ISNS20 SPI1 Pins (used when ISNS20_SPI_PORT = 1)
-ISNS20_SPI1_SCK_PIN = 10
-ISNS20_SPI1_MOSI_PIN = 11
-ISNS20_SPI1_MISO_PIN = 12
+# ACS37030 Current Sensor Configuration (via ADS1115 I2C)
+ENABLE_ACS37030 = True  # Set to False if ACS37030 sensors not connected
+ACS37030_I2C_ADDRESS = 0x48  # ADS1115 I2C address
+ACS37030_I2C_SCL_PIN = 5  # I2C1 SCL (GP5)
+ACS37030_I2C_SDA_PIN = 4  # I2C1 SDA (GP4)
+ACS37030_SENSITIVITY = 0.066  # V/A for ±20A (66 mV/A version)
+ACS37030_ZERO_POINT = 1.65  # V (zero current voltage)
+ACS37030_NUM_SENSORS = 5  # Number of ACS37030 sensors (max 5)
+ACS37030_PICO_ADC_PIN = 26  # GP26 for 5th sensor (ADC0)
 
 # Timing
 SENSOR_UPDATE_INTERVAL_MS = 1000
@@ -152,11 +156,33 @@ def validate_config() -> bool:
     if not isinstance(DS18B20_PIN, int) or DS18B20_PIN < 0 or DS18B20_PIN > 28:
         errors.append("DS18B20_PIN must be 0-22 or 26-28 (23-25, 29 reserved)")
 
-    if not isinstance(ISNS20_CS_PIN, int) or ISNS20_CS_PIN < 0 or ISNS20_CS_PIN > 28:
-        errors.append("ISNS20_CS_PIN must be 0-22 or 26-28 (23-25, 29 reserved)")
+    if (
+        not isinstance(ACS37030_I2C_SCL_PIN, int)
+        or ACS37030_I2C_SCL_PIN < 0
+        or ACS37030_I2C_SCL_PIN > 28
+    ):
+        errors.append("ACS37030_I2C_SCL_PIN must be 0-22 or 26-28")
 
-    if ISNS20_SPI_PORT not in (0, 1):
-        errors.append("ISNS20_SPI_PORT must be 0 or 1")
+    if (
+        not isinstance(ACS37030_I2C_SDA_PIN, int)
+        or ACS37030_I2C_SDA_PIN < 0
+        or ACS37030_I2C_SDA_PIN > 28
+    ):
+        errors.append("ACS37030_I2C_SDA_PIN must be 0-22 or 26-28")
+
+    if (
+        not isinstance(ACS37030_PICO_ADC_PIN, int)
+        or ACS37030_PICO_ADC_PIN < 0
+        or ACS37030_PICO_ADC_PIN > 28
+    ):
+        errors.append("ACS37030_PICO_ADC_PIN must be 0-22 or 26-28")
+
+    if (
+        not isinstance(ACS37030_NUM_SENSORS, int)
+        or ACS37030_NUM_SENSORS < 1
+        or ACS37030_NUM_SENSORS > 5
+    ):
+        errors.append("ACS37030_NUM_SENSORS must be 1-5")
 
     if not isinstance(SD_SCK_PIN, int) or SD_SCK_PIN < 0 or SD_SCK_PIN > 28:
         errors.append("SD_SCK_PIN must be 0-22 or 26-28")

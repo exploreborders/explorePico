@@ -1,11 +1,11 @@
 # Pico 2W MQTT Client with SD Card & GitHub Updater
 
-MicroPython project for Raspberry Pi Pico 2W that integrates with Home Assistant via MQTT. Reads DS18B20 temperature sensors and Pmod ISNS20 current sensor. Supports wireless code updates via SD card or GitHub.
+MicroPython project for Raspberry Pi Pico 2W that integrates with Home Assistant via MQTT. Reads DS18B20 temperature sensors and ACS37030 current sensors. Supports wireless code updates via SD card or GitHub.
 
 ## Features
 
 - **Temperature Sensing**: Two DS18B20 temperature sensors on single GPIO (room + water)
-- **Current Sensing**: Pmod ISNS20 20A current sensor
+- **Current Sensing**: Up to 5x ACS37030LLZATR-020B3 (±20A) current sensors via ADS1115 I2C
 - **Home Assistant Integration**: Automatic MQTT discovery for all sensors
 - **LED Control**: Control Pico LED via MQTT
 - **Internal Temperature**: RP2350 internal temperature sensor
@@ -19,7 +19,8 @@ MicroPython project for Raspberry Pi Pico 2W that integrates with Home Assistant
 
 - Raspberry Pi Pico 2W (RP2350)
 - 2x DS18B20 temperature sensors (waterproof probes recommended)
-- 1x Pmod ISNS20 20A current sensor
+- 5x ACS37030LLZATR-020B3 (±20A) current sensors
+- 1x ADS1115 4-channel I2C ADC
 - 1x micro SD card module (SPI)
 - 1x push button (for update trigger)
 - 1x 4.7kΩ resistor (for DS18B20 data line pull-up)
@@ -29,10 +30,9 @@ MicroPython project for Raspberry Pi Pico 2W that integrates with Home Assistant
 | Sensor | GPIO | Notes |
 |--------|------|-------|
 | DS18B20 (both) | GP22 | 1-Wire bus, supports multiple sensors |
-| ISNS20 CS | GP8 | SPI Chip Select |
-| ISNS20 SCK | GP2 | SPI Clock |
-| ISNS20 MOSI | GP3 | SPI Data Out |
-| ISNS20 MISO | GP4 | SPI Data In |
+| ADS1115 SCL | GP5 | I2C1 Clock |
+| ADS1115 SDA | GP4 | I2C1 Data |
+| ACS37030 #5 | GP26 | Pico ADC for 5th current sensor |
 | SD Card MOSI | GP15 | SPI Data Out |
 | SD Card MISO | GP12 | SPI Data In |
 | SD Card SCK | GP14 | SPI Clock |
@@ -58,6 +58,45 @@ All sensors share:
 - **Data (DQ)**: GP22
 - **VCC**: 3V3
 - **GND**: GND
+
+### ACS37030 Current Sensor Wiring (via ADS1115)
+
+The project supports up to 5 ACS37030LLZATR-020B3 (±20A) current sensors:
+- 4 sensors via ADS1115 I2C ADC (channels A0-A3)
+- 1 sensor via Pico's built-in ADC (GP26)
+
+#### ADS1115 Wiring
+
+| ADS1115 | Pico Pin |
+|---------|----------|
+| VDD | 3V3 |
+| GND | GND |
+| SCL | GP5 (I2C1 SCL) |
+| SDA | GP4 (I2C1 SDA) |
+| A0 | ACS37030 #1 VOUT |
+| A1 | ACS37030 #2 VOUT |
+| A2 | ACS37030 #3 VOUT |
+| A3 | ACS37030 #4 VOUT |
+
+#### ACS37030 #5 Wiring (Pico ADC)
+
+| ACS37030 #5 | Pico Pin |
+|-------------|----------|
+| VDD | 3V3 |
+| GND | GND |
+| VOUT | GP26 (ADC0) |
+
+#### ACS37030 Pinout
+
+Each ACS37030 has these pins:
+| Pin | Function |
+|-----|----------|
+| VDD | 3.3V |
+| GND | Ground |
+| VOUT | Analog output (0.33V at -20A, 1.65V at 0A, 2.97V at +20A) |
+| VREF | Reference (optional) |
+
+The current path (IP+/IP-) is used to pass the wire to measure current.
 
 ### SD Card Module Wiring
 
@@ -343,10 +382,14 @@ The device is automatically discovered via MQTT discovery. After running, you sh
 - Check SSL settings (port 8883 for TLS)
 - Ensure firewall allows MQTT ports
 
-### ISNS20 Reading Wrong
-- Ensure correct SPI wiring (SCK, MISO, CS)
-- Check 3.3V power connection
-- Verify no jumpers for 120Hz bandwidth (recommended)
+### ISNS20 Reading Wrong (Deprecated)
+- This sensor is no longer supported. Use ACS37030 instead.
+
+### ACS37030 Reading Wrong
+- Verify ADS1115 I2C wiring (SCL=GP5, SDA=GP4)
+- Check 3.3V power to both ADS1115 and ACS37030
+- Verify ACS37030 sensitivity (66 mV/A for ±20A version)
+- Zero current should read ~1.65V on VOUT
 
 ### Temperature Sensors Swap
 - First sensor found = room temp
@@ -375,8 +418,9 @@ secondTest/
 ├── version.txt         # Current version reference
 ├── sensors/
 │   ├── __init__.py
-│   ├── ds18b20.py      # Temperature sensor driver
-│   └── isns20.py       # Current sensor driver
+│   ├── ds18b20.py      # DS18B20 temperature sensor driver
+│   ├── ads1115.py      # ADS1115 I2C ADC driver
+│   └── acs37030.py     # ACS37030 current sensor driver
 └── .vscode/            # VS Code settings
 ```
 
