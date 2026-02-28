@@ -44,38 +44,38 @@ DEVICE_NAME = "Raspberry Pi Pico 2W"
 DEVICE_IDENTIFIER = "pico2w"
 
 # MQTT Topics
-TOPIC_LED_COMMAND = "homeassistant/switch/pico/led/set"
-TOPIC_LED_STATE = "homeassistant/switch/pico/led/state"
-TOPIC_LED_CONFIG = "homeassistant/switch/pico/led/config"
+TOPIC_LED_COMMAND = "homeassistant/pico/switch/led/set"
+TOPIC_LED_STATE = "homeassistant/pico/switch/led/state"
+TOPIC_LED_CONFIG = "homeassistant/pico/switch/led/config"
 
-TOPIC_TEMP_STATE = "homeassistant/sensor/pico/cpu_temp"
-TOPIC_TEMP_CONFIG = "homeassistant/sensor/pico/cpu_temp/config"
+TOPIC_TEMP_STATE = "homeassistant/pico/sensor/cpu_temp"
+TOPIC_TEMP_CONFIG = "homeassistant/pico/sensor/cpu_temp/config"
 
-TOPIC_ROOM_TEMP_STATE = "homeassistant/sensor/pico/room_temp"
-TOPIC_ROOM_TEMP_CONFIG = "homeassistant/sensor/pico/room_temp/config"
+TOPIC_ROOM_TEMP_STATE = "homeassistant/pico/sensor/room_temp"
+TOPIC_ROOM_TEMP_CONFIG = "homeassistant/pico/sensor/room_temp/config"
 
-TOPIC_WATER_TEMP_STATE = "homeassistant/sensor/pico/water_temp"
-TOPIC_WATER_TEMP_CONFIG = "homeassistant/sensor/pico/water_temp/config"
+TOPIC_WATER_TEMP_STATE = "homeassistant/pico/sensor/water_temp"
+TOPIC_WATER_TEMP_CONFIG = "homeassistant/pico/sensor/water_temp/config"
 
 # ACS37030 Current Sensors (5 sensors)
-TOPIC_CURRENT_1_STATE = "homeassistant/sensor/pico/current_1"
-TOPIC_CURRENT_1_CONFIG = "homeassistant/sensor/pico/current_1/config"
-TOPIC_CURRENT_2_STATE = "homeassistant/sensor/pico/current_2"
-TOPIC_CURRENT_2_CONFIG = "homeassistant/sensor/pico/current_2/config"
-TOPIC_CURRENT_3_STATE = "homeassistant/sensor/pico/current_3"
-TOPIC_CURRENT_3_CONFIG = "homeassistant/sensor/pico/current_3/config"
-TOPIC_CURRENT_4_STATE = "homeassistant/sensor/pico/current_4"
-TOPIC_CURRENT_4_CONFIG = "homeassistant/sensor/pico/current_4/config"
-TOPIC_CURRENT_5_STATE = "homeassistant/sensor/pico/current_5"
-TOPIC_CURRENT_5_CONFIG = "homeassistant/sensor/pico/current_5/config"
+TOPIC_CURRENT_1_STATE = "homeassistant/pico/sensor/current_1"
+TOPIC_CURRENT_1_CONFIG = "homeassistant/pico/sensor/current_1/config"
+TOPIC_CURRENT_2_STATE = "homeassistant/pico/sensor/current_2"
+TOPIC_CURRENT_2_CONFIG = "homeassistant/pico/sensor/current_2/config"
+TOPIC_CURRENT_3_STATE = "homeassistant/pico/sensor/current_3"
+TOPIC_CURRENT_3_CONFIG = "homeassistant/pico/sensor/current_3/config"
+TOPIC_CURRENT_4_STATE = "homeassistant/pico/sensor/current_4"
+TOPIC_CURRENT_4_CONFIG = "homeassistant/pico/sensor/current_4/config"
+TOPIC_CURRENT_5_STATE = "homeassistant/pico/sensor/current_5"
+TOPIC_CURRENT_5_CONFIG = "homeassistant/pico/sensor/current_5/config"
 
 # Device availability topic (for last-will and birth message)
-TOPIC_AVAILABILITY = "homeassistant/sensor/pico/availability"
+TOPIC_AVAILABILITY = "homeassistant/pico/sensor/availability"
 
 # Update Button Topics
-TOPIC_UPDATE_COMMAND = "homeassistant/button/pico/update/set"
-TOPIC_UPDATE_STATE = "homeassistant/button/pico/update/state"
-TOPIC_UPDATE_CONFIG = "homeassistant/button/pico/update/config"
+TOPIC_UPDATE_COMMAND = "homeassistant/pico/button/update/set"
+TOPIC_UPDATE_STATE = "homeassistant/pico/button/update/state"
+TOPIC_UPDATE_CONFIG = "homeassistant/pico/button/update/config"
 
 # DS18B20 Configuration
 DS18B20_PIN = 22  # GPIO pin for DS18B20 temperature sensors (supports multiple)
@@ -92,6 +92,7 @@ ACS37030_SENSITIVITY = 0.066  # V/A for ±20A (66 mV/A version)
 ACS37030_ZERO_POINT = 1.65  # V (zero current voltage)
 ACS37030_NUM_SENSORS = 5  # Number of ACS37030 sensors (max 5)
 ACS37030_PICO_ADC_PIN = 26  # GP26 for 5th sensor (ADC0)
+ENABLE_ACS37030_PICO_ADC = False  # Set to True when 5th sensor is physically connected
 
 # Timing
 SENSOR_UPDATE_INTERVAL_MS = 1000

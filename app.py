@@ -63,12 +63,14 @@ from config import (
     MQTT_SSL,
     DS18B20_PIN,
     ENABLE_ACS37030,
+    ENABLE_ACS37030_PICO_ADC,
     ACS37030_I2C_ADDRESS,
     ACS37030_I2C_SCL_PIN,
     ACS37030_I2C_SDA_PIN,
     ACS37030_SENSITIVITY,
     ACS37030_ZERO_POINT,
     ACS37030_NUM_SENSORS,
+    ACS37030_PICO_ADC_PIN,
     GITHUB_OWNER,
     GITHUB_REPO,
     SENSOR_UPDATE_INTERVAL_MS,
@@ -129,29 +131,38 @@ ads1115 = None
 current_sensors = []
 
 if ENABLE_ACS37030:
-    ads1115 = ADS1115(
-        address=ACS37030_I2C_ADDRESS,
-        scl_pin=ACS37030_I2C_SCL_PIN,
-        sda_pin=ACS37030_I2C_SDA_PIN,
-    )
-    ads1115.init()
-
-    # Create sensors for ADS1115 channels 0-3 (first 4 sensors)
-    for i in range(min(ACS37030_NUM_SENSORS, 4)):
-        sensor = ACS37030(
-            ads1115,
-            channel=i,
-            sensitivity=ACS37030_SENSITIVITY,
-            zero_point=ACS37030_ZERO_POINT,
-            is_pico_adc=False,
+    try:
+        ads1115 = ADS1115(
+            address=ACS37030_I2C_ADDRESS,
+            scl_pin=ACS37030_I2C_SCL_PIN,
+            sda_pin=ACS37030_I2C_SDA_PIN,
         )
-        manager = ACS37030Manager(sensor, f"ACS37030_{i + 1}", SENSOR_RETRY_INTERVAL_MS)
-        manager.set_logger(log)
-        current_sensors.append(manager)
+        if ads1115.init():
+            log("ADS1115 initialized successfully")
+            # Create sensors for ADS1115 channels 0-3 (first 4 sensors)
+            for i in range(min(ACS37030_NUM_SENSORS, 4)):
+                sensor = ACS37030(
+                    ads1115,
+                    channel=i,
+                    sensitivity=ACS37030_SENSITIVITY,
+                    zero_point=ACS37030_ZERO_POINT,
+                    is_pico_adc=False,
+                )
+                manager = ACS37030Manager(
+                    sensor, f"ACS37030_{i + 1}", SENSOR_RETRY_INTERVAL_MS
+                )
+                manager.set_logger(log)
+                current_sensors.append(manager)
+        else:
+            log("ADS1115 init returned False, skipping sensors 1-4")
+            ads1115 = None
+    except Exception as e:
+        log(f"ADS1115 not available: {e}")
+        ads1115 = None
 
-    # Create 5th sensor using Pico's built-in ADC (if we need 5)
-    if ACS37030_NUM_SENSORS >= 5:
-        pico_adc = machine.ADC(26)  # GP26 = ADC0
+    # Create 5th sensor using Pico's built-in ADC (only if enabled)
+    if ACS37030_NUM_SENSORS >= 5 and ENABLE_ACS37030_PICO_ADC:
+        pico_adc = machine.ADC(ACS37030_PICO_ADC_PIN)
         sensor = ACS37030(
             pico_adc,
             channel=0,
@@ -162,6 +173,8 @@ if ENABLE_ACS37030:
         manager = ACS37030Manager(sensor, "ACS37030_5", SENSOR_RETRY_INTERVAL_MS)
         manager.set_logger(log)
         current_sensors.append(manager)
+    elif ACS37030_NUM_SENSORS >= 5 and not ENABLE_ACS37030_PICO_ADC:
+        log("Sensor 5 disabled in config (ENABLE_ACS37030_PICO_ADC = False)")
 
 led.off()
 
@@ -445,7 +458,8 @@ def on_message(topic: bytes, msg: bytes) -> None:
             log("LED", msg_str)
 
         elif topic_str == TOPIC_UPDATE_COMMAND:
-            if msg_str == "CHECK" and update_state == "idle":
+            # Accept PRESS (from HA button) or CHECK (manual)
+            if msg_str in ("CHECK", "PRESS") and update_state == "idle":
                 update_state = "checking"
                 mqtt_publish(TOPIC_UPDATE_STATE, "checking")
                 log("UPDATE", "Checking for updates...")
@@ -457,7 +471,8 @@ def on_message(topic: bytes, msg: bytes) -> None:
                     update_state = "up_to_date"
                     mqtt_publish(TOPIC_UPDATE_STATE, "up_to_date")
 
-            elif msg_str == "UPDATE" and update_state == "available":
+            # Accept UPDATE or PRESS when update is available
+            elif msg_str in ("UPDATE", "PRESS") and update_state == "available":
                 mqtt_publish(TOPIC_UPDATE_STATE, "rebooting")
                 log("UPDATE", "Rebooting to apply update...")
                 time.sleep(1)
