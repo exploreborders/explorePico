@@ -69,6 +69,19 @@ from updater_utils import (
     copy_file_content,
 )
 
+try:
+    from secrets import GITHUB_TOKEN
+except ImportError:
+    GITHUB_TOKEN = None
+
+
+def get_headers() -> dict:
+    """Get HTTP headers with optional auth token."""
+    headers = {"Accept": "application/vnd.github+json"}
+    if GITHUB_TOKEN:
+        headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
+    return headers
+
 
 def get_latest_release(owner: str, repo: str) -> dict | None:
     """Fetch latest release info from GitHub API."""
@@ -78,7 +91,7 @@ def get_latest_release(owner: str, repo: str) -> dict | None:
 
     try:
         url = f"https://api.github.com/repos/{owner}/{repo}/releases/latest"
-        response = requests.get(url, timeout=10)
+        response = requests.get(url, headers=get_headers(), timeout=10)
 
         if response.status_code == 200:
             data = ujson.loads(response.text)
@@ -121,7 +134,7 @@ def download_and_update(owner: str, repo: str, release_info: dict) -> bool:
 
         try:
             log(f"Downloading {filename}...")
-            response = requests.get(url, timeout=30)
+            response = requests.get(url, headers=get_headers(), timeout=30)
 
             if response.status_code != 200:
                 log(f"Download failed ({response.status_code}): {filename}")
