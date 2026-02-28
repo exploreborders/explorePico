@@ -79,7 +79,7 @@ def get_headers() -> dict:
     """Get HTTP headers with optional auth token."""
     headers = {"Accept": "application/vnd.github+json"}
     if GITHUB_TOKEN:
-        headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
+        headers["Authorization"] = f"token {GITHUB_TOKEN}"
     return headers
 
 
