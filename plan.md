@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-MicroPython project for Raspberry Pi Pico 2W integrating with Home Assistant via MQTT. Reads DS18B20 temperature sensors (multiple on single GPIO) and Pmod ISNS20 current sensor. Supports wireless code updates via SD card.
+MicroPython project for Raspberry Pi Pico 2W integrating with Home Assistant via MQTT. Reads DS18B20 temperature sensors (multiple on single GPIO) and ACS37030 current sensors. Supports wireless code updates via SD card or GitHub.
 
 ## Hardware
 
@@ -12,7 +12,8 @@ MicroPython project for Raspberry Pi Pico 2W integrating with Home Assistant via
 |-----------|-------|----------|---------|
 | Microcontroller | Raspberry Pi Pico 2W | 1 | Main controller with WiFi |
 | Temperature Sensor | DS18B20 waterproof | 2 | Room and water temperature |
-| Current Sensor | Pmod ISNS20 | 1 | Current measurement (20A) |
+| Current Sensor | ACS37030LLZATR-020B3 | 5 | Current measurement (±20A) |
+| ADC | ADS1115 | 1 | I2C ADC for current sensors |
 | SD Card Module | SPI micro SD | 1 | Code updates storage |
 | Push Button | Momentary | 1 | Trigger updates |
 
@@ -21,10 +22,9 @@ MicroPython project for Raspberry Pi Pico 2W integrating with Home Assistant via
 | Component | GPIO | Interface | Notes |
 |-----------|------|-----------|-------|
 | DS18B20 | GP22 | 1-Wire | Shared bus for both sensors |
-| ISNS20 CS | GP8 | SPI0 | Chip select |
-| ISNS20 SCK | GP2 | SPI0 | Clock |
-| ISNS20 MOSI | GP3 | SPI0 | Data out |
-| ISNS20 MISO | GP4 | SPI0 | Data in |
+| ADS1115 SCL | GP5 | I2C1 | Clock |
+| ADS1115 SDA | GP4 | I2C1 | Data |
+| ACS37030 #5 | GP26 | ADC0 | 5th current sensor |
 | SD MOSI | GP15 | SPI0 | Data out |
 | SD MISO | GP12 | SPI0 | Data in |
 | SD SCK | GP14 | SPI0 | Clock |
@@ -44,7 +44,7 @@ MicroPython project for Raspberry Pi Pico 2W integrating with Home Assistant via
 ### Implemented
 
 - [x] DS18B20 temperature sensing (multiple sensors)
-- [x] ISNS20 current sensing
+- [x] ACS37030 current sensing (5 sensors via ADS1115)
 - [x] MQTT integration with Home Assistant
 - [x] Automatic MQTT discovery
 - [x] LED control via MQTT
@@ -52,7 +52,9 @@ MicroPython project for Raspberry Pi Pico 2W integrating with Home Assistant via
 - [x] Auto-reconnect (WiFi + MQTT)
 - [x] Sensor hot-swap detection
 - [x] SD Card code updater
+- [x] GitHub WiFi updater
 - [x] Manual rollback (double-press)
+- [x] Update button in Home Assistant
 
 ### SD Card Updater
 
@@ -72,16 +74,21 @@ MicroPython project for Raspberry Pi Pico 2W integrating with Home Assistant via
 
 ```
 secondTest/
-├── boot.py              # Entry point, calls sd_updater then main
+├── main.py              # Entry point (runs on boot), calls app.main()
+├── app.py              # Main MQTT application
 ├── sd_updater.py       # SD card code updater module
-├── main.py             # Main MQTT application
+├── github_updater.py   # GitHub WiFi updater
 ├── config.py           # Configuration constants
 ├── secrets.py          # WiFi/MQTT credentials (not committed)
 ├── version.txt         # Current version (reference)
+├── blink.py            # LED blink utilities
+├── wifi_utils.py       # WiFi connection utilities
+├── updater_utils.py    # Shared backup/restore, version, logging
 ├── sensors/
 │   ├── __init__.py     # Sensor imports
 │   ├── ds18b20.py      # DS18B20 driver
-│   └── isns20.py       # ISNS20 driver
+│   ├── ads1115.py      # ADS1115 I2C ADC driver
+│   └── acs37030.py     # ACS37030 current sensor driver
 └── .vscode/           # VS Code settings
 ```
 
@@ -91,17 +98,19 @@ secondTest/
 Power on
     │
     ▼
-boot.py runs
+main.py runs (entry point)
     │
-    ├── Double-press (within 2s) ──► Rollback ──► Restore /backup/ ──► Reboot
+    ├── GitHub update check
+    │    │
+    │    └── Update available? ──► Download ──► Reboot
     │
-    ├── Single-press ──► Update ──► Mount SD ──► Check version
-    │                              │
-    │                              ├── Version higher? ──► Backup ──► Copy files ──► Reboot
-    │                              │
-    │                              └── Version same/lower ──► Skip
+    ├── SD card update check
+    │    │
+    │    ├── Double-press (within 2s) ──► Rollback ──► Restore /backup/ ──► Reboot
+    │    │
+    │    └── Update available? ──► Copy files ──► Reboot
     │
-    └── No press ──► Run main.py
+    └── Run app.main() ──► MQTT client, sensors, Home Assistant
 ```
 
 ## MQTT Configuration
@@ -116,11 +125,15 @@ boot.py runs
 | `homeassistant/sensor/pico/room_temp/config` | Discovery | Room temp config |
 | `homeassistant/sensor/pico/water_temp/state` | State | Water temperature |
 | `homeassistant/sensor/pico/water_temp/config` | Discovery | Water temp config |
-| `homeassistant/sensor/pico/current/state` | State | Current measurement |
-| `homeassistant/sensor/pico/current/config` | Discovery | Current config |
+| `homeassistant/sensor/pico/current_1-5/state` | State | Current measurements (5 sensors) |
+| `homeassistant/sensor/pico/current_1-5/config` | Discovery | Current sensor configs |
 | `homeassistant/switch/pico/led/state` | State | LED state |
 | `homeassistant/switch/pico/led/set` | Command | LED control |
 | `homeassistant/switch/pico/led/config` | Discovery | LED config |
+| `homeassistant/button/pico/update/set` | Command | Update button command |
+| `homeassistant/button/pico/update/state` | State | Update button state |
+| `homeassistant/button/pico/update/config` | Discovery | Update button config |
+| `homeassistant/sensor/pico/availability` | State | Device online/offline |
 
 ### Publish-If-Changed Pattern
 
@@ -164,7 +177,7 @@ def mqtt_publish(topic: str, value: str, retain: bool = True) -> bool:
 - [x] WiFi connects
 - [x] MQTT connects to broker
 - [x] DS18B20 sensors read correctly
-- [x] ISNS20 current reads correctly
+- [x] ACS37030 current sensors read correctly (5 sensors)
 - [x] Home Assistant discovers all entities
 - [x] LED control works
 - [x] Auto-reconnect works
@@ -173,6 +186,8 @@ def mqtt_publish(topic: str, value: str, retain: bool = True) -> bool:
 - [x] Update copies files correctly
 - [x] Rollback restores files
 - [x] LED patterns display correctly
+- [x] GitHub update check works
+- [x] Update button in Home Assistant works
 
 ## Configuration
 
@@ -192,13 +207,20 @@ MQTT_SSL = True
 
 # Pins
 DS18B20_PIN = 22
-ISNS20_CS_PIN = 8
-ISNS20_SPI_PORT = 0
+ACS37030_I2C_ADDRESS = 0x48
+ACS37030_I2C_SCL_PIN = 5
+ACS37030_I2C_SDA_PIN = 4
+ACS37030_NUM_SENSORS = 5
+ACS37030_PICO_ADC_PIN = 26
 SD_SCK_PIN = 14
 SD_MOSI_PIN = 15
 SD_MISO_PIN = 12
 SD_CS_PIN = 13
 UPDATE_BUTTON_PIN = 10
+
+# GitHub
+GITHUB_OWNER = "yourusername"
+GITHUB_REPO = "your-repo"
 ```
 
 ## Notes
@@ -210,6 +232,10 @@ Multiple DS18B20 sensors on same GPIO are auto-assigned by discovery order:
 - Second sensor found (index 1) = Water temperature
 
 If only one sensor is connected, water_temp shows "unavailable".
+
+ACS37030 current sensors are assigned by channel:
+- Channels 0-3 (ADS1115) = Current sensors 1-4
+- Channel 4 (Pico ADC) = Current sensor 5
 
 ### SD Card Requirements
 

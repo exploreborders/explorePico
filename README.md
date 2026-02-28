@@ -147,13 +147,13 @@ MQTT_PASSWORD = "mqtt_password"
 Using MicroPico (VS Code extension):
 ```bash
 micropico connect
-%send app.py
+%send main.py
 %send sd_updater.py
 %send github_updater.py
 %send blink.py
 %send wifi_utils.py
 %send updater_utils.py
-%send main.py
+%send app.py
 %send config.py
 %send secrets.py
 %send -r sensors/
@@ -161,13 +161,13 @@ micropico connect
 
 Or using mpremote:
 ```bash
-mpremote cp app.py :
+mpremote cp main.py :
 mpremote cp sd_updater.py :
 mpremote cp github_updater.py :
 mpremote cp blink.py :
 mpremote cp wifi_utils.py :
 mpremote cp updater_utils.py :
-mpremote cp main.py :
+mpremote cp app.py :
 mpremote cp config.py :
 mpremote cp secrets.py :
 mpremote cp -r sensors/ :
@@ -175,9 +175,7 @@ mpremote cp -r sensors/ :
 
 ### 4. Run
 
-The Pico will automatically run `app.py` (or `boot.py` if renamed) on power-up, which then runs `main.py`.
-
-> Note: For development, use `app.py` to avoid auto-execution. Rename to `boot.py` for production auto-start.
+The Pico will automatically run `main.py` on power-up, which then runs `app.main()`.
 
 ## SD Card Code Updater
 
@@ -270,7 +268,7 @@ Boot
     │     │
     │     └─ Newer version? → Download → Write → Reboot
     │
-    └─ Continue to main.py
+    └─ Continue to app.main()
 ```
 
 ### LED Feedback Patterns
@@ -288,9 +286,9 @@ Boot
 1. **Make repo public**
 2. **Create GitHub releases** with version tags (e.g., v1.7)
 3. **Attach files** to release:
-   - main.py
+   - main.py (entry point)
+   - app.py (main application)
    - config.py
-   - app.py (or boot.py if renamed)
    - blink.py
    - wifi_utils.py
    - updater_utils.py
@@ -298,7 +296,8 @@ Boot
    - github_updater.py
    - sensors/__init__.py
    - sensors/ds18b20.py
-   - sensors/isns20.py
+   - sensors/ads1115.py
+   - sensors/acs37030.py
 
 ### Creating a GitHub Release
 
@@ -406,22 +405,22 @@ The device is automatically discovered via MQTT discovery. After running, you sh
 
 ```
 secondTest/
-├── app.py             # Entry point with GitHub & SD update check
+├── main.py             # Entry point (runs on boot), calls app.main()
+├── app.py              # Main application
 ├── github_updater.py   # GitHub WiFi updater
 ├── sd_updater.py       # SD card updater
 ├── blink.py            # Shared LED blink utilities
 ├── wifi_utils.py       # Shared WiFi connection utilities
-├── updater_utils.py    # Shared backup/restore, version, logging
-├── main.py             # Main application
-├── config.py           # Configuration
-├── secrets.py          # WiFi/MQTT credentials
-├── version.txt         # Current version reference
+├── updater_utils.py   # Shared backup/restore, version, logging
+├── config.py          # Configuration
+├── secrets.py         # WiFi/MQTT credentials
+├── version.txt        # Current version reference
 ├── sensors/
 │   ├── __init__.py
-│   ├── ds18b20.py      # DS18B20 temperature sensor driver
-│   ├── ads1115.py      # ADS1115 I2C ADC driver
-│   └── acs37030.py     # ACS37030 current sensor driver
-└── .vscode/            # VS Code settings
+│   ├── ds18b20.py     # DS18B20 temperature sensor driver
+│   ├── ads1115.py     # ADS1115 I2C ADC driver
+│   └── acs37030.py    # ACS37030 current sensor driver
+└── .vscode/           # VS Code settings
 ```
 
 ## License

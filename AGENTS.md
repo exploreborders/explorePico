@@ -10,8 +10,8 @@ MicroPython project for Raspberry Pi Pico 2W integrating with Home Assistant via
 
 ```
 secondTest/
-├── main.py            # Main application (MQTT client)
-├── app.py            # Entry point - handles updates before launching main
+├── main.py            # Entry point (runs on boot)
+├── app.py            # Main application (MQTT client)
 ├── config.py         # Configuration (pins, MQTT topics, timing)
 ├── secrets.py        # WiFi/MQTT credentials (NOT committed)
 ├── wifi_utils.py     # Shared WiFi connection utilities
@@ -41,7 +41,7 @@ ruff check main.py        # Single file
 ### Upload to Pico (MicroPico)
 ```bash
 micropico connect
-%send app.py
+%send main.py
 %send sd_updater.py
 %send github_updater.py
 %send blink.py

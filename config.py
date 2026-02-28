@@ -72,6 +72,11 @@ TOPIC_CURRENT_5_CONFIG = "homeassistant/sensor/pico/current_5/config"
 # Device availability topic (for last-will and birth message)
 TOPIC_AVAILABILITY = "homeassistant/sensor/pico/availability"
 
+# Update Button Topics
+TOPIC_UPDATE_COMMAND = "homeassistant/button/pico/update/set"
+TOPIC_UPDATE_STATE = "homeassistant/button/pico/update/state"
+TOPIC_UPDATE_CONFIG = "homeassistant/button/pico/update/config"
+
 # DS18B20 Configuration
 DS18B20_PIN = 22  # GPIO pin for DS18B20 temperature sensors (supports multiple)
 
