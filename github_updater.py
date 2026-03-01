@@ -44,6 +44,21 @@ import time
 import ujson
 import ubinascii
 
+FILES_TO_UPDATE = [
+    "main.py",
+    "app.py",
+    "config.py",
+    "github_updater.py",
+    "sd_updater.py",
+    "blink.py",
+    "wifi_utils.py",
+    "updater_utils.py",
+    "sensors/__init__.py",
+    "sensors/ds18b20.py",
+    "sensors/ads1115.py",
+    "sensors/acs37030.py",
+]
+
 try:
     import urequests as requests
 except ImportError:
@@ -149,7 +164,7 @@ def get_file_content(owner: str, repo: str, path: str, ref: str) -> str | None:
 
 
 def get_all_py_files(owner: str, repo: str, ref: str, prefix: str = "") -> list:
-    """Recursively get all .py files from repository."""
+    """Get list of .py files from repository - filtered to essential files only."""
     files = []
     contents = get_file_list(owner, repo, ref)
 
@@ -163,7 +178,8 @@ def get_all_py_files(owner: str, repo: str, ref: str, prefix: str = "") -> list:
 
         if item_type == "file" and name.endswith(".py"):
             full_path = prefix + name if not prefix else prefix + "/" + name
-            files.append({"path": full_path, "api_path": path})
+            if full_path in FILES_TO_UPDATE:
+                files.append({"path": full_path, "api_path": path})
         elif item_type == "dir" and name not in [".git", ".vscode"]:
             sub_files = get_all_py_files(owner, repo, ref, name)
             files.extend(sub_files)
@@ -198,14 +214,10 @@ def download_and_update(owner: str, repo: str, release_info: dict) -> bool:
     log("Downloading files...")
     blink_pattern("11")
 
-    if not create_backup():
-        blink_pattern("111")
-        return False
-
-    files_updated = 0
-    files_failed = False
     tag = release_info.get("tag", "")
     py_files = release_info.get("files", [])
+
+    log(f"Updating {len(py_files)} files")
 
     for file_info in py_files:
         filename = file_info.get("path", "")
@@ -224,31 +236,22 @@ def download_and_update(owner: str, repo: str, release_info: dict) -> bool:
 
             if content is None:
                 log(f"Download failed: {filename}")
-                files_failed = True
-                break
+                return False
 
             if not copy_file_content(content, filename):
-                files_failed = True
-                break
+                return False
 
             log(f"Updated: {filename}")
-            files_updated += 1
 
         except Exception as e:
             log(f"Failed to update {filename}: {e}")
-            files_failed = True
-            break
+            return False
 
-    if files_failed:
-        log("Update failed, restoring backup")
-        restore_backup()
-        cleanup_backup()
-        blink_pattern("111")
-        return False
-
-    cleanup_backup()
-    log(f"Updated {files_updated} files")
+    write_version(tag)
+    log(f"Updated to {tag}, rebooting...")
     blink_pattern("11011")
+    time.sleep(1)
+    machine.reset()
     return True
 
 
