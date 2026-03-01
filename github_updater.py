@@ -25,6 +25,8 @@ from updater_utils import (
     write_version,
     compare_versions,
     copy_file_content,
+    create_backup,
+    restore_backup,
 )
 
 try:
@@ -170,6 +172,17 @@ def download_and_update(owner: str, repo: str, release_info: dict) -> bool:
 
     log(f"Updating {len(files)} files")
 
+    # Create backup BEFORE updating (like sd_updater does)
+    log("Creating backup...")
+    if not create_backup():
+        log("Backup failed, aborting update!")
+        blink_pattern("111")
+        return False
+    log("Backup created")
+
+    # Track downloaded files for potential rollback
+    downloaded_files = []
+
     for file_info in files:
         filename = file_info.get("path", "")
         raw_url = file_info.get("raw_url", "")
@@ -187,22 +200,38 @@ def download_and_update(owner: str, repo: str, release_info: dict) -> bool:
 
             if content is None:
                 log(f"Download failed: {filename}")
+                # Rollback: restore original files
+                log("Update failed, restoring backup...")
+                blink_pattern("111")
+                restore_backup()
                 return False
 
             if not copy_file_content(content, filename):
+                log(f"Write failed: {filename}")
+                log("Restoring backup...")
+                blink_pattern("111")
+                restore_backup()
                 return False
 
+            downloaded_files.append(filename)
             log(f"Updated: {filename}")
 
         except Exception as e:
             log(f"Failed to update {filename}: {e}")
+            log("Restoring backup...")
+            blink_pattern("111")
+            restore_backup()
             return False
 
+    # All files updated successfully - now write version and reboot
     write_version(tag)
-    log(f"Updated to {tag}, rebooting...")
+    log(f"Updated to {tag}")
     blink_pattern("11011")
-    time.sleep(1)
+
+    # Give time for log to flush before reset
+    time.sleep(0.5)
     machine.reset()
+    # Should never reach here
     return True
 
 

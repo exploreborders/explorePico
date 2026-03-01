@@ -43,6 +43,7 @@ except Exception:
 
 github_updated = False
 sd_updated = False
+update_check_executed = False
 
 if GITHUB_UPDATES_ENABLED:
     log("Connecting to WiFi...")
@@ -52,16 +53,21 @@ if GITHUB_UPDATES_ENABLED:
             from github_updater import check_and_update
 
             log("Checking GitHub for updates...")
+            update_check_executed = True
             github_updated = check_and_update(GITHUB_OWNER, GITHUB_REPO)
 
+            # Note: If github_updated is True, download_and_update()
+            # already called machine.reset() - we never reach here
             if github_updated:
                 log("GitHub update applied, rebooting...")
+            else:
+                log("No GitHub update available")
         except Exception as e:
             log(f"GitHub update check failed: {e}")
     else:
         log("WiFi connection failed")
 
-if not github_updated:
+if not github_updated and not update_check_executed:
     try:
         from sd_updater import check_and_apply_update
 
