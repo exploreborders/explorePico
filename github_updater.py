@@ -3,32 +3,6 @@ GitHub WiFi Updater for Pico 2W
 
 Checks GitHub releases for updates and automatically downloads
 and applies firmware updates over WiFi.
-
-Update Process:
-    1. Connect to WiFi
-    2. Fetch latest release tag from GitHub API
-    3. Get file list from repository contents
-    4. Compare version with current
-    5. If newer, download all .py and version.txt files
-    6. Reboot to apply changes
-
-GitHub Setup:
-    1. Create a GitHub repository with .py files
-    2. Create a release with version tag (e.g., v1.2.0)
-    3. Configure GITHUB_OWNER and GITHUB_REPO in config.py
-
-Rollback:
-    If update fails, Pico will boot with old code.
-
-Usage:
-    Automatic on boot if WiFi is available.
-    Configure GITHUB_OWNER and GITHUB_REPO in config.py.
-
-Notes:
-    - Requires urequests library
-    - Updates ALL .py files + version.txt
-    - secrets.py is never overwritten
-    - 10 second timeout for API, 30s for downloads
 """
 
 import machine
@@ -119,9 +93,7 @@ def get_raw_url(owner: str, repo: str, path: str, ref: str) -> str:
     return f"https://raw.githubusercontent.com/{owner}/{repo}/{ref}/{path}"
 
 
-def get_all_files(
-    owner: str, repo: str, ref: str, prefix: str = "", seen: set = None
-) -> list:
+def get_all_files(owner: str, repo: str, ref: str, seen: set = None) -> list:
     """Recursively get all .py and version.txt files from repository."""
     if seen is None:
         seen = set()
@@ -143,23 +115,7 @@ def get_all_files(
             seen.add(path)
             files.append({"path": path, "raw_url": get_raw_url(owner, repo, path, ref)})
         elif item_type == "dir" and name not in [".git", ".vscode", "__pycache__"]:
-            sub_files = get_all_files(owner, repo, ref, "", seen)
-            files.extend(sub_files)
-
-    return files
-
-    for item in contents:
-        name = item.get("name", "")
-        path = item.get("path", "")
-        item_type = item.get("type", "")
-
-        if item_type == "file" and (name.endswith(".py") or name == "version.txt"):
-            full_path = prefix + name if not prefix else prefix + "/" + name
-            files.append(
-                {"path": full_path, "raw_url": get_raw_url(owner, repo, path, ref)}
-            )
-        elif item_type == "dir" and name not in [".git", ".vscode", "__pycache__"]:
-            sub_files = get_all_files(owner, repo, ref, name + "/")
+            sub_files = get_all_files(owner, repo, ref, seen)
             files.extend(sub_files)
 
     return files
@@ -195,9 +151,6 @@ def get_latest_release(owner: str, repo: str) -> dict | None:
         return None
 
     log(f"Found {len(files)} files to update")
-
-    if len(files) > 50:
-        log(f"WARNING: {len(files)} files - too many, may fail")
 
     return {
         "tag": tag,
