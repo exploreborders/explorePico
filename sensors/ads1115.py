@@ -104,6 +104,15 @@ class ADS1115:
         self.i2c = None
         self.gain = self.PGA_4_096V
         self.voltage_multiplier = 0.125
+        self._logger = print  # Default to print, can be overridden
+
+    def set_logger(self, logger) -> None:
+        """Set custom logger function."""
+        self._logger = logger
+
+    def _log(self, message: str) -> None:
+        """Log message using configured logger."""
+        self._logger("ADS1115", message)
 
     def init(self) -> bool:
         """Initialize I2C and verify ADS1115 communication."""
@@ -117,15 +126,15 @@ class ADS1115:
 
             devices = self.i2c.scan()
             if self.address not in devices:
-                print(f"[ADS1115] Device not found at 0x{self.address:02X}")
+                self._log(f"Device not found at 0x{self.address:02X}")
                 return False
 
             self.set_gain(self.PGA_4_096V)
-            print(f"[ADS1115] Initialized at 0x{self.address:02X}")
+            self._log(f"Initialized at 0x{self.address:02X}")
             return True
 
         except Exception as e:
-            print(f"[ADS1115] Init failed: {e}")
+            self._log(f"Init failed: {e}")
             return False
 
     def set_gain(self, gain: int) -> None:
@@ -197,7 +206,7 @@ class ADS1115:
             return voltage
 
         except Exception as e:
-            print(f"[ADS1115] Read error: {e}")
+            self._log(f"Read error: {e}")
             return None
 
     def read_raw(self, channel: int) -> int | None:
@@ -235,5 +244,5 @@ class ADS1115:
             return raw
 
         except Exception as e:
-            print(f"[ADS1115] Read error: {e}")
+            self._log(f"Read error: {e}")
             return None

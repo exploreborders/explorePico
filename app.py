@@ -138,6 +138,7 @@ if ENABLE_ACS37030:
             scl_pin=ACS37030_I2C_SCL_PIN,
             sda_pin=ACS37030_I2C_SDA_PIN,
         )
+        ads1115.set_logger(log)
         if ads1115.init():
             log("ADS1115 initialized successfully")
             # Create sensors for ADS1115 channels 0-3 (first 4 sensors)
