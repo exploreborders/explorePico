@@ -119,13 +119,34 @@ def get_raw_url(owner: str, repo: str, path: str, ref: str) -> str:
     return f"https://raw.githubusercontent.com/{owner}/{repo}/{ref}/{path}"
 
 
-def get_all_files(owner: str, repo: str, ref: str, prefix: str = "") -> list:
+def get_all_files(
+    owner: str, repo: str, ref: str, prefix: str = "", seen: set = None
+) -> list:
     """Recursively get all .py and version.txt files from repository."""
+    if seen is None:
+        seen = set()
+
     files = []
     contents = get_file_list(owner, repo, ref)
 
     if not contents:
         return files
+
+    for item in contents:
+        name = item.get("name", "")
+        path = item.get("path", "")
+        item_type = item.get("type", "")
+
+        if item_type == "file" and (name.endswith(".py") or name == "version.txt"):
+            if path in seen:
+                continue
+            seen.add(path)
+            files.append({"path": path, "raw_url": get_raw_url(owner, repo, path, ref)})
+        elif item_type == "dir" and name not in [".git", ".vscode", "__pycache__"]:
+            sub_files = get_all_files(owner, repo, ref, "", seen)
+            files.extend(sub_files)
+
+    return files
 
     for item in contents:
         name = item.get("name", "")
@@ -174,6 +195,9 @@ def get_latest_release(owner: str, repo: str) -> dict | None:
         return None
 
     log(f"Found {len(files)} files to update")
+
+    if len(files) > 50:
+        log(f"WARNING: {len(files)} files - too many, may fail")
 
     return {
         "tag": tag,
