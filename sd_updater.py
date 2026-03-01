@@ -83,10 +83,12 @@ def init_sd() -> bool:
     try:
         spi = machine.SPI(
             0,
-            baudrate=400000,
+            baudrate=100000,
             sck=machine.Pin(SD_SCK_PIN),
             mosi=machine.Pin(SD_MOSI_PIN),
             miso=machine.Pin(SD_MISO_PIN),
+            polarity=0,
+            phase=0,
         )
         cs = machine.Pin(SD_CS_PIN, machine.Pin.OUT)
         sd_card = sdcard.SDCard(spi, cs)

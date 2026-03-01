@@ -109,11 +109,11 @@ MQTT_LOOP_DELAY = 0.1  # Main loop iteration delay
 ERROR_DELAY_SHORT = 1.0  # After minor error
 ERROR_DELAY_LONG = 2.0  # After serious error/connection lost
 
-# SD Card Updater Configuration
-SD_SCK_PIN = 14
-SD_MOSI_PIN = 15
-SD_MISO_PIN = 12
-SD_CS_PIN = 13
+# SD Card Updater Configuration (SPI0)
+SD_SCK_PIN = 2
+SD_MOSI_PIN = 3
+SD_MISO_PIN = 4
+SD_CS_PIN = 5
 UPDATE_BUTTON_PIN = 10
 
 # GitHub WiFi Updater Configuration

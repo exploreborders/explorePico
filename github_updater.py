@@ -95,10 +95,14 @@ def get_latest_release(owner: str, repo: str) -> dict | None:
 
         if response.status_code == 200:
             data = ujson.loads(response.text)
+            assets = data.get("assets", [])
+            if not assets:
+                log("Release has no files attached")
+                return None
             return {
                 "tag": data.get("tag_name", "").lstrip("v"),
                 "name": data.get("name", ""),
-                "assets": data.get("assets", []),
+                "assets": assets,
             }
         else:
             log(f"GitHub API error: {response.status_code}")
