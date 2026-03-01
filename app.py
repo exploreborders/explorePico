@@ -272,6 +272,11 @@ def get_led_config() -> dict:
         "state_topic": TOPIC_LED_STATE,
         "payload_on": "ON",
         "payload_off": "OFF",
+        "availability": {
+            "topic": TOPIC_AVAILABILITY,
+            "payload_available": "online",
+            "payload_not_available": "offline",
+        },
         "device": get_device_info(),
     }
 
@@ -283,7 +288,11 @@ def get_temp_config() -> dict:
         "unique_id": "pico_temp",
         "state_topic": TOPIC_TEMP_STATE,
         "unit_of_measurement": "C",
-        "availability_topic": TOPIC_AVAILABILITY,
+        "availability": {
+            "topic": TOPIC_AVAILABILITY,
+            "payload_available": "online",
+            "payload_not_available": "offline",
+        },
         "device": get_device_info(),
     }
 
@@ -295,7 +304,11 @@ def get_room_temp_config() -> dict:
         "unique_id": "pico_room_temp",
         "state_topic": TOPIC_ROOM_TEMP_STATE,
         "unit_of_measurement": "C",
-        "availability_topic": TOPIC_AVAILABILITY,
+        "availability": {
+            "topic": TOPIC_AVAILABILITY,
+            "payload_available": "online",
+            "payload_not_available": "offline",
+        },
         "device": get_device_info(),
     }
 
@@ -307,7 +320,11 @@ def get_water_temp_config() -> dict:
         "unique_id": "pico_water_temp",
         "state_topic": TOPIC_WATER_TEMP_STATE,
         "unit_of_measurement": "C",
-        "availability_topic": TOPIC_AVAILABILITY,
+        "availability": {
+            "topic": TOPIC_AVAILABILITY,
+            "payload_available": "online",
+            "payload_not_available": "offline",
+        },
         "device": get_device_info(),
     }
 
@@ -331,7 +348,11 @@ def get_current_config(index: int) -> dict:
         "state_topic": state_topic,
         "unit_of_measurement": "A",
         "device_class": "current",
-        "availability_topic": TOPIC_AVAILABILITY,
+        "availability": {
+            "topic": TOPIC_AVAILABILITY,
+            "payload_available": "online",
+            "payload_not_available": "offline",
+        },
         "device": get_device_info(),
     }
 
@@ -343,6 +364,11 @@ def get_update_config() -> dict:
         "unique_id": "pico_update",
         "command_topic": TOPIC_UPDATE_COMMAND,
         "state_topic": TOPIC_UPDATE_STATE,
+        "availability": {
+            "topic": TOPIC_AVAILABILITY,
+            "payload_available": "online",
+            "payload_not_available": "offline",
+        },
         "device": get_device_info(),
     }
 

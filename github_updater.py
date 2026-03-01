@@ -115,7 +115,9 @@ def get_all_files(owner: str, repo: str, ref: str, seen: set = None) -> list:
             seen.add(path)
             files.append({"path": path, "raw_url": get_raw_url(owner, repo, path, ref)})
         elif item_type == "dir" and name not in [".git", ".vscode", "__pycache__"]:
-            sub_files = get_all_files(owner, repo, ref, seen)
+            # Recursively get files from subdirectory
+            sub_path = f"{ref}/{name}" if ref else name
+            sub_files = get_all_files(owner, repo, sub_path, seen)
             files.extend(sub_files)
 
     return files

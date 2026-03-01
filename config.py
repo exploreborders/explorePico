@@ -70,7 +70,7 @@ TOPIC_CURRENT_5_STATE = "homeassistant/pico/sensor/current_5"
 TOPIC_CURRENT_5_CONFIG = "homeassistant/pico/sensor/current_5/config"
 
 # Device availability topic (for last-will and birth message)
-TOPIC_AVAILABILITY = "homeassistant/pico/sensor/availability"
+TOPIC_AVAILABILITY = "homeassistant/pico/availability"
 
 # Update Button Topics
 TOPIC_UPDATE_COMMAND = "homeassistant/pico/button/update/set"
