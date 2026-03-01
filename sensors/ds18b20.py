@@ -59,6 +59,15 @@ class DS18B20:
         self.last_values: list[float | None] = []
         self._conversion_started = False
         self._conversion_start_time = 0
+        self._logger = print  # Default to print, can be overridden
+
+    def set_logger(self, logger) -> None:
+        """Set custom logger function."""
+        self._logger = logger
+
+    def _log(self, message: str) -> None:
+        """Log message using configured logger."""
+        self._logger("DS18B20", message)
 
     def init(self) -> bool:
         """Initialize OneWire and DS18x20, scan for devices."""
@@ -69,9 +78,9 @@ class DS18B20:
         self.roms = self.ds.scan()
         if self.roms:
             self.last_values = [None] * len(self.roms)
-            print(f"[DS18B20] Found {len(self.roms)} device(s) on GPIO{self.pin_num}")
+            self._log(f"Found {len(self.roms)} device(s) on GPIO{self.pin_num}")
             return True
-        print(f"[DS18B20] No devices found on GPIO{self.pin_num}")
+        self._log(f"No devices found on GPIO{self.pin_num}")
         return False
 
     def start_conversion(self) -> bool:
@@ -138,6 +147,9 @@ class DS18B20Manager:
     def set_logger(self, logger) -> None:
         """Set custom logger function."""
         self.log_func = logger
+        # Also pass logger to the underlying sensor
+        if hasattr(self.sensor, "set_logger"):
+            self.sensor.set_logger(logger)
 
     def read(self, conversion_time_ms: int = 750) -> list[float | None]:
         """Read temperatures from all sensors. Returns list of temperatures."""

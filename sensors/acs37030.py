@@ -131,6 +131,7 @@ class ACS37030Manager:
         sensor: ACS37030,
         name: str = "ACS37030",
         retry_interval_ms: int = 60000,
+        buffer_size: int = 10,
     ) -> None:
         """Initialize sensor manager.
 
@@ -138,6 +139,7 @@ class ACS37030Manager:
             sensor: ACS37030 instance
             name: Sensor name for logging
             retry_interval_ms: Retry interval for failed init
+            buffer_size: Size of moving average buffer (higher = smoother)
         """
         self.sensor = sensor
         self.name = name
@@ -149,7 +151,7 @@ class ACS37030Manager:
         self._ever_connected = False
 
         self._raw_buffer = []
-        self._buffer_size = 10
+        self._buffer_size = buffer_size
 
     def set_logger(self, logger) -> None:
         """Set logging function.

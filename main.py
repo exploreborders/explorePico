@@ -1,5 +1,5 @@
 """
-boot.py - Entry Point for Pico 2W MQTT Client
+main.py - Entry Point for Pico 2W MQTT Client
 
 This is the main entry point that runs on boot. It handles firmware updates
 before launching the main application.
@@ -15,7 +15,7 @@ Rollback:
 
 Usage:
     Upload all .py files to Pico flash. On reset, this file runs first.
-    It will check for updates and then launch main.py automatically.
+    It will check for updates and then launch the application automatically.
 
 Configuration:
     Update behavior is controlled by config.py settings:
