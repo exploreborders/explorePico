@@ -181,11 +181,9 @@ def create_backup() -> bool:
     """Backup all Python files before update."""
     try:
         # Remove existing backup if any
-        try:
-            uos.rmdir(BACKUP_FOLDER)
-        except Exception:
-            pass
+        _remove_backup_folder()
 
+        # Create backup directory
         uos.mkdir(BACKUP_FOLDER)
 
         # Get all .py files
@@ -216,6 +214,34 @@ def create_backup() -> bool:
     except Exception as e:
         log(f"Backup failed: {e}")
         return False
+
+
+def _remove_backup_folder() -> None:
+    """Helper to remove backup folder and all contents."""
+    try:
+        # List contents
+        files = uos.listdir(BACKUP_FOLDER)
+        for f in files:
+            path = f"{BACKUP_FOLDER}/{f}"
+            try:
+                stat = uos.stat(path)
+                if stat[0] & 0x4000:  # Is directory
+                    # Remove all files in subdirectory
+                    try:
+                        subfiles = uos.listdir(path)
+                        for sf in subfiles:
+                            uos.remove(f"{path}/{sf}")
+                    except Exception:
+                        pass
+                    uos.rmdir(path)
+                else:
+                    uos.remove(path)
+            except Exception:
+                pass
+        # Remove the backup folder itself
+        uos.rmdir(BACKUP_FOLDER)
+    except Exception:
+        pass  # Folder doesn't exist, that's fine
 
 
 def restore_backup() -> bool:

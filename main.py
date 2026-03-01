@@ -25,7 +25,7 @@ Configuration:
 
 import sys
 
-from wifi_utils import connect
+from wifi_utils import connect_multi
 from updater_utils import log
 
 try:
@@ -34,6 +34,8 @@ try:
         GITHUB_REPO,
         WIFI_SSID,
         WIFI_PASSWORD,
+        WIFI_SSID_2,
+        WIFI_PASSWORD_2,
     )
 
     GITHUB_UPDATES_ENABLED = True
@@ -47,7 +49,12 @@ update_check_executed = False
 
 if GITHUB_UPDATES_ENABLED:
     log("Connecting to WiFi...")
-    if connect(WIFI_SSID, WIFI_PASSWORD):
+    # Build list of networks to try
+    networks = [(WIFI_SSID, WIFI_PASSWORD)]
+    if WIFI_SSID_2 and WIFI_PASSWORD_2:
+        networks.append((WIFI_SSID_2, WIFI_PASSWORD_2))
+
+    if connect_multi(networks):
         log("WiFi connected!")
         try:
             from github_updater import check_and_update

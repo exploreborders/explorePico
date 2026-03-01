@@ -128,6 +128,8 @@ try:
     from secrets import (
         WIFI_SSID,
         WIFI_PASSWORD,
+        WIFI_SSID_2,
+        WIFI_PASSWORD_2,
         MQTT_BROKER,
         MQTT_PORT,
         MQTT_USER,
@@ -149,6 +151,13 @@ def validate_config() -> bool:
 
     if not WIFI_PASSWORD or not isinstance(WIFI_PASSWORD, str):
         errors.append("WIFI_PASSWORD must be a non-empty string")
+
+    # Secondary WiFi is optional but if provided, must be valid
+    if WIFI_SSID_2 is not None:
+        if not isinstance(WIFI_SSID_2, str):
+            errors.append("WIFI_SSID_2 must be a string")
+        if WIFI_PASSWORD_2 is None or not isinstance(WIFI_PASSWORD_2, str):
+            errors.append("WIFI_PASSWORD_2 must be provided if WIFI_SSID_2 is set")
 
     if not MQTT_BROKER or not isinstance(MQTT_BROKER, str):
         errors.append("MQTT_BROKER must be a non-empty string")

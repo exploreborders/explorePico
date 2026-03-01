@@ -47,7 +47,7 @@ import ubinascii
 import micropython
 
 from blink import blink_pattern, led
-from wifi_utils import connect, is_connected
+from wifi_utils import connect_multi, is_connected
 from updater_utils import log
 from github_updater import check_and_update
 from sensors import DS18B20, DS18B20Manager, ACS37030, ACS37030Manager
@@ -56,6 +56,8 @@ from sensors.ads1115 import ADS1115
 from config import (
     WIFI_SSID,
     WIFI_PASSWORD,
+    WIFI_SSID_2,
+    WIFI_PASSWORD_2,
     MQTT_BROKER,
     MQTT_PORT,
     MQTT_USER,
@@ -248,8 +250,11 @@ def read_temperature() -> float:
 
 
 def connect_wifi() -> bool:
-    """Connect to WiFi network with retry logic."""
-    return connect(WIFI_SSID, WIFI_PASSWORD, log_fn=log, blink_fn=blink_pattern)
+    """Connect to WiFi network with retry logic. Tries multiple networks."""
+    networks = [(WIFI_SSID, WIFI_PASSWORD)]
+    if WIFI_SSID_2 and WIFI_PASSWORD_2:
+        networks.append((WIFI_SSID_2, WIFI_PASSWORD_2))
+    return connect_multi(networks, log_fn=log, blink_fn=blink_pattern)
 
 
 def ensure_wifi() -> bool:
