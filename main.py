@@ -6,8 +6,7 @@ before launching the main application.
 
 Update Priority:
     1. GitHub updates (if enabled and WiFi available)
-    2. SD card updates (if no GitHub update)
-    3. Launch main application
+    2. Launch main application
 
 Rollback:
     Press the update button twice within 2 seconds at boot to trigger
@@ -24,9 +23,10 @@ Configuration:
 """
 
 import sys
+import machine
 
-from wifi_utils import connect_multi
-from updater_utils import log
+from wifi_utils import scan_and_connect
+from updater_utils import log, detect_rollback_trigger, perform_rollback
 
 try:
     from config import (
@@ -36,6 +36,7 @@ try:
         WIFI_PASSWORD,
         WIFI_SSID_2,
         WIFI_PASSWORD_2,
+        UPDATE_BUTTON_PIN,
     )
 
     GITHUB_UPDATES_ENABLED = True
@@ -44,8 +45,18 @@ except Exception:
 
 
 github_updated = False
-sd_updated = False
 update_check_executed = False
+
+# Check for rollback trigger FIRST (before any updates)
+if GITHUB_UPDATES_ENABLED:
+    try:
+        if detect_rollback_trigger(UPDATE_BUTTON_PIN):
+            log("Rollback triggered!")
+            if perform_rollback():
+                log("Rebooting...")
+                machine.reset()
+    except Exception as e:
+        log(f"Rollback check failed: {e}")
 
 if GITHUB_UPDATES_ENABLED:
     log("Connecting to WiFi...")
@@ -54,7 +65,7 @@ if GITHUB_UPDATES_ENABLED:
     if WIFI_SSID_2 and WIFI_PASSWORD_2:
         networks.append((WIFI_SSID_2, WIFI_PASSWORD_2))
 
-    if connect_multi(networks):
+    if scan_and_connect(networks):
         log("WiFi connected!")
         try:
             from github_updater import check_and_update
@@ -73,18 +84,6 @@ if GITHUB_UPDATES_ENABLED:
             log(f"GitHub update check failed: {e}")
     else:
         log("WiFi connection failed")
-
-if not github_updated and not update_check_executed:
-    try:
-        from sd_updater import check_and_apply_update
-
-        log("Checking SD card for updates...")
-        sd_updated = check_and_apply_update()
-
-        if sd_updated:
-            log("SD update applied, rebooting...")
-    except Exception as e:
-        log(f"SD update check failed: {e}")
 
 try:
     import app

@@ -62,6 +62,7 @@ class ACS37030:
         channel: int,
         sensitivity: float = 0.066,
         zero_point: float = 1.65,
+        zero_point_offset: float = 0.0,
         is_pico_adc: bool = False,
     ) -> None:
         """Initialize ACS37030 sensor.
@@ -71,14 +72,38 @@ class ACS37030:
             channel: ADC channel (0-3 for ADS1115)
             sensitivity: Volts per Amp (0.066 for ±20A version)
             zero_point: Voltage at zero current (1.65V for bidirectional)
+            zero_point_offset: Calibration offset to adjust zero_point
             is_pico_adc: True if using Pico built-in ADC
         """
         self.adc = adc
         self.channel = channel
         self.sensitivity = sensitivity
         self.zero_point = zero_point
+        self.zero_point_offset = zero_point_offset
         self.is_pico_adc = is_pico_adc
         self.last_value: float | None = None
+
+    def calibrate_zero(self, samples: int = 10) -> float:
+        """Calibrate zero point by averaging readings at zero current.
+
+        Args:
+            samples: Number of samples to average
+
+        Returns:
+            Calibrated zero point voltage
+        """
+        readings = []
+        for _ in range(samples):
+            v = self.read_voltage()
+            if v is not None:
+                readings.append(v)
+            time.sleep(0.05)
+
+        if readings:
+            measured_zero = sum(readings) / len(readings)
+            self.zero_point_offset = measured_zero - self.zero_point
+            return measured_zero
+        return self.zero_point
 
     def read_voltage(self) -> float | None:
         """Read voltage from ADC.
@@ -107,7 +132,9 @@ class ACS37030:
         if voltage is None:
             return None
 
-        current = (voltage - self.zero_point) / self.sensitivity
+        adjusted_zero = self.zero_point + self.zero_point_offset
+        current = (voltage - adjusted_zero) / self.sensitivity
+
         self.last_value = current
         return round(current, 2)
 
@@ -168,8 +195,11 @@ class ACS37030Manager:
         else:
             print(f"[{self.name}] {message}")
 
-    def init(self) -> bool:
-        """Initialize sensor with retry logic.
+    def init(self, auto_calibrate: bool = False) -> bool:
+        """Initialize sensor with retry logic and optional auto-calibration.
+
+        Args:
+            auto_calibrate: If True, calibrate zero point on first init
 
         Returns:
             True if initialization successful
@@ -188,6 +218,14 @@ class ACS37030Manager:
             self._initialized = True
             self._ever_connected = True
             self._log("Initialized successfully")
+
+            if auto_calibrate:
+                self._log("Calibrating zero point...")
+                measured = self.sensor.calibrate_zero(samples=10)
+                self._log(
+                    f"Zero point: {measured:.3f}V (offset: {self.sensor.zero_point_offset:.3f}V)"
+                )
+
             return True
 
         self._log("Init failed! Retrying...")

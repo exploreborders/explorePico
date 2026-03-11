@@ -26,8 +26,7 @@ Timing Configuration:
     - ERROR_DELAY_*: Error handling delays
 
 Update Configuration:
-    - SD_SCK_PIN, SD_MOSI_PIN, SD_MISO_PIN, SD_CS_PIN: SD card pins
-    - UPDATE_BUTTON_PIN: GPIO pin for rollback trigger
+    - UPDATE_BUTTON_PIN: GPIO pin for rollback trigger (double-press at boot)
     - GITHUB_OWNER, GITHUB_REPO: GitHub repository for OTA updates
 
 Secrets:
@@ -86,10 +85,14 @@ INTERNAL_TEMP_ADC_PIN = 4  # RP2350 internal temperature sensor (ADC4)
 # ACS37030 Current Sensor Configuration (via ADS1115 I2C)
 ENABLE_ACS37030 = True  # Set to False if ACS37030 sensors not connected
 ACS37030_I2C_ADDRESS = 0x48  # ADS1115 I2C address
-ACS37030_I2C_SCL_PIN = 5  # I2C1 SCL (GP5)
-ACS37030_I2C_SDA_PIN = 4  # I2C1 SDA (GP4)
+ACS37030_I2C_SCL_PIN = 5  # I2C0 SCL (GP5)
+ACS37030_I2C_SDA_PIN = 4  # I2C0 SDA (GP4)
+ACS37030_I2C_ID = 0  # Use I2C0
 ACS37030_SENSITIVITY = 0.066  # V/A for ±20A (66 mV/A version)
 ACS37030_ZERO_POINT = 1.65  # V (zero current voltage)
+ACS37030_ZERO_OFFSET = (
+    0.008  # Calibration offset (adjust if not exactly 0A at no current)
+)
 ACS37030_NUM_SENSORS = 5  # Number of ACS37030 sensors (max 5)
 ACS37030_PICO_ADC_PIN = 26  # GP26 for 5th sensor (ADC0)
 ENABLE_ACS37030_PICO_ADC = False  # Set to True when 5th sensor is physically connected
@@ -112,12 +115,8 @@ MQTT_LOOP_DELAY = 0.1  # Main loop iteration delay
 ERROR_DELAY_SHORT = 1.0  # After minor error
 ERROR_DELAY_LONG = 2.0  # After serious error/connection lost
 
-# SD Card Updater Configuration (SPI0)
-SD_SCK_PIN = 2
-SD_MOSI_PIN = 3
-SD_MISO_PIN = 4
-SD_CS_PIN = 5
-UPDATE_BUTTON_PIN = 10
+# Rollback Button Configuration
+UPDATE_BUTTON_PIN = 10  # GPIO pin for rollback trigger (double-press at boot)
 
 # GitHub WiFi Updater Configuration
 GITHUB_OWNER = "exploreborders"
@@ -201,18 +200,6 @@ def validate_config() -> bool:
         or ACS37030_NUM_SENSORS > 5
     ):
         errors.append("ACS37030_NUM_SENSORS must be 1-5")
-
-    if not isinstance(SD_SCK_PIN, int) or SD_SCK_PIN < 0 or SD_SCK_PIN > 28:
-        errors.append("SD_SCK_PIN must be 0-22 or 26-28")
-
-    if not isinstance(SD_MOSI_PIN, int) or SD_MOSI_PIN < 0 or SD_MOSI_PIN > 28:
-        errors.append("SD_MOSI_PIN must be 0-22 or 26-28")
-
-    if not isinstance(SD_MISO_PIN, int) or SD_MISO_PIN < 0 or SD_MISO_PIN > 28:
-        errors.append("SD_MISO_PIN must be 0-22 or 26-28")
-
-    if not isinstance(SD_CS_PIN, int) or SD_CS_PIN < 0 or SD_CS_PIN > 28:
-        errors.append("SD_CS_PIN must be 0-22 or 26-28")
 
     if (
         not isinstance(UPDATE_BUTTON_PIN, int)

@@ -145,18 +145,19 @@ class ADS1115:
         """
         self.gain = gain
 
+        # voltage_multiplier = FSR / 32768
         if gain == self.PGA_6_144V:
-            self.voltage_multiplier = 0.187500
+            self.voltage_multiplier = 6.144 / 32768  # 0.0001875
         elif gain == self.PGA_4_096V:
-            self.voltage_multiplier = 0.125000
+            self.voltage_multiplier = 4.096 / 32768  # 0.000125
         elif gain == self.PGA_2_048V:
-            self.voltage_multiplier = 0.062500
+            self.voltage_multiplier = 2.048 / 32768  # 0.0000625
         elif gain == self.PGA_1_024V:
-            self.voltage_multiplier = 0.031250
+            self.voltage_multiplier = 1.024 / 32768  # 0.00003125
         elif gain == self.PGA_0_512V:
-            self.voltage_multiplier = 0.015625
+            self.voltage_multiplier = 0.512 / 32768  # 0.000015625
         elif gain == self.PGA_0_256V:
-            self.voltage_multiplier = 0.007813
+            self.voltage_multiplier = 0.256 / 32768  # 0.000007813
 
     def _write_config(self, config: int) -> None:
         """Write configuration register."""
@@ -169,11 +170,12 @@ class ADS1115:
         data = self.i2c.readfrom_mem(self.address, self.REG_CONVERSION, 2)
         return (data[0] << 8) | data[1]
 
-    def read_voltage(self, channel: int) -> float | None:
-        """Read voltage from specified channel.
+    def read_voltage(self, channel: int, retries: int = 3) -> float | None:
+        """Read voltage from specified channel with retry logic.
 
         Args:
             channel: ADC channel (0-3)
+            retries: Number of retry attempts on I2C error
 
         Returns:
             Voltage in volts, or None on error
@@ -181,39 +183,47 @@ class ADS1115:
         if channel < 0 or channel > 3:
             return None
 
-        try:
-            mux = [
-                self.MUX_SINGLE_0,
-                self.MUX_SINGLE_1,
-                self.MUX_SINGLE_2,
-                self.MUX_SINGLE_3,
-            ][channel]
+        for attempt in range(retries):
+            try:
+                mux = [
+                    self.MUX_SINGLE_0,
+                    self.MUX_SINGLE_1,
+                    self.MUX_SINGLE_2,
+                    self.MUX_SINGLE_3,
+                ][channel]
 
-            config = (
-                self.OS_SINGLE | mux | self.gain | self.MODE_SINGLE | self.DR_128SPS
-            )
+                config = (
+                    self.OS_SINGLE | mux | self.gain | self.MODE_SINGLE | self.DR_128SPS
+                )
 
-            self._write_config(config)
+                self._write_config(config)
 
-            time.sleep(0.1)
+                time.sleep(0.15)
 
-            raw = self._read_conversion()
+                raw = self._read_conversion()
 
-            if raw & 0x8000:
-                raw = raw - 65536
+                if raw & 0x8000:
+                    raw = raw - 65536
 
-            voltage = raw * self.voltage_multiplier / 32768.0
-            return voltage
+                voltage = raw * self.voltage_multiplier
 
-        except Exception as e:
-            self._log(f"Read error: {e}")
-            return None
+                return voltage
 
-    def read_raw(self, channel: int) -> int | None:
-        """Read raw ADC value from channel.
+            except Exception as e:
+                if attempt < retries - 1:
+                    time.sleep(0.05)
+                    continue
+                self._log(f"Read error: {e}")
+                return None
+
+        return None
+
+    def read_raw(self, channel: int, retries: int = 3) -> int | None:
+        """Read raw ADC value from channel with retry logic.
 
         Args:
             channel: ADC channel (0-3)
+            retries: Number of retry attempts on I2C error
 
         Returns:
             Raw 16-bit ADC value, or None on error
@@ -221,28 +231,34 @@ class ADS1115:
         if channel < 0 or channel > 3:
             return None
 
-        try:
-            mux = [
-                self.MUX_SINGLE_0,
-                self.MUX_SINGLE_1,
-                self.MUX_SINGLE_2,
-                self.MUX_SINGLE_3,
-            ][channel]
+        for attempt in range(retries):
+            try:
+                mux = [
+                    self.MUX_SINGLE_0,
+                    self.MUX_SINGLE_1,
+                    self.MUX_SINGLE_2,
+                    self.MUX_SINGLE_3,
+                ][channel]
 
-            config = (
-                self.OS_SINGLE | mux | self.gain | self.MODE_SINGLE | self.DR_128SPS
-            )
+                config = (
+                    self.OS_SINGLE | mux | self.gain | self.MODE_SINGLE | self.DR_128SPS
+                )
 
-            self._write_config(config)
-            time.sleep(0.1)
+                self._write_config(config)
+                time.sleep(0.1)
 
-            raw = self._read_conversion()
+                raw = self._read_conversion()
 
-            if raw & 0x8000:
-                raw = raw - 65536
+                if raw & 0x8000:
+                    raw = raw - 65536
 
-            return raw
+                return raw
 
-        except Exception as e:
-            self._log(f"Read error: {e}")
-            return None
+            except Exception as e:
+                if attempt < retries - 1:
+                    time.sleep(0.05)
+                    continue
+                self._log(f"Read error: {e}")
+                return None
+
+        return None

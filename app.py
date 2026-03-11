@@ -47,7 +47,7 @@ import ubinascii
 import micropython
 
 from blink import blink_pattern, led
-from wifi_utils import connect_multi, is_connected
+from wifi_utils import scan_and_connect, is_connected
 from updater_utils import log
 from github_updater import check_and_update
 from sensors import DS18B20, DS18B20Manager, ACS37030, ACS37030Manager
@@ -69,8 +69,10 @@ from config import (
     ACS37030_I2C_ADDRESS,
     ACS37030_I2C_SCL_PIN,
     ACS37030_I2C_SDA_PIN,
+    ACS37030_I2C_ID,
     ACS37030_SENSITIVITY,
     ACS37030_ZERO_POINT,
+    ACS37030_ZERO_OFFSET,
     ACS37030_NUM_SENSORS,
     ACS37030_PICO_ADC_PIN,
     ACS37030_BUFFER_SIZE,
@@ -139,6 +141,7 @@ if ENABLE_ACS37030:
             address=ACS37030_I2C_ADDRESS,
             scl_pin=ACS37030_I2C_SCL_PIN,
             sda_pin=ACS37030_I2C_SDA_PIN,
+            i2c_id=ACS37030_I2C_ID,
         )
         ads1115.set_logger(log)
         if ads1115.init():
@@ -150,6 +153,7 @@ if ENABLE_ACS37030:
                     channel=i,
                     sensitivity=ACS37030_SENSITIVITY,
                     zero_point=ACS37030_ZERO_POINT,
+                    zero_point_offset=ACS37030_ZERO_OFFSET,
                     is_pico_adc=False,
                 )
                 manager = ACS37030Manager(
@@ -254,7 +258,7 @@ def connect_wifi() -> bool:
     networks = [(WIFI_SSID, WIFI_PASSWORD)]
     if WIFI_SSID_2 and WIFI_PASSWORD_2:
         networks.append((WIFI_SSID_2, WIFI_PASSWORD_2))
-    return connect_multi(networks, log_fn=log, blink_fn=blink_pattern)
+    return scan_and_connect(networks, log_fn=log, blink_fn=blink_pattern)
 
 
 def ensure_wifi() -> bool:
@@ -439,7 +443,9 @@ DISCOVERY_REGISTRY = [
 if ENABLE_ACS37030:
     for i in range(len(current_sensors)):
         _, config_topic, _, _ = CURRENT_TOPICS[i]
-        DISCOVERY_REGISTRY.append((config_topic, lambda idx=i: get_current_config(idx)))
+        DISCOVERY_REGISTRY.append(
+            (config_topic, lambda idx=i: lambda: get_current_config(idx))
+        )
 
 
 # -----------------------------------------------------------------------------
