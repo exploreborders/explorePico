@@ -463,13 +463,22 @@ DISCOVERY_REGISTRY = [
     (TOPIC_PROGRESS_CONFIG, get_progress_config),
 ]
 
+
+# Helper function for current sensor config (fixes lambda closure issue)
+def _make_current_config(idx):
+    """Factory function to create current config getter with bound index."""
+
+    def config():
+        return get_current_config(idx)
+
+    return config
+
+
 # Add ACS37030 current sensor discovery configs
 if ENABLE_ACS37030:
     for i in range(len(current_sensors)):
         _, config_topic, _, _ = CURRENT_TOPICS[i]
-        DISCOVERY_REGISTRY.append(
-            (config_topic, lambda idx=i: lambda: get_current_config(idx))
-        )
+        DISCOVERY_REGISTRY.append((config_topic, _make_current_config(i)))
 
 
 # -----------------------------------------------------------------------------
