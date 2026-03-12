@@ -112,8 +112,7 @@ from config import (
     TOPIC_UPDATE_COMMAND,
     TOPIC_UPDATE_STATE,
     TOPIC_UPDATE_CONFIG,
-    TOPIC_PROGRESS_STATE,
-    TOPIC_PROGRESS_CONFIG,
+    TOPIC_UPDATE_ATTRIBUTES,
     TOPIC_AVAILABILITY,
     DEVICE_NAME,
     DEVICE_IDENTIFIER,
@@ -382,23 +381,8 @@ def get_update_config() -> dict:
         "unique_id": "pico_update",
         "command_topic": TOPIC_UPDATE_COMMAND,
         "state_topic": TOPIC_UPDATE_STATE,
-        "availability": {
-            "topic": TOPIC_AVAILABILITY,
-            "payload_available": "online",
-            "payload_not_available": "offline",
-        },
-        "device": get_device_info(),
-    }
-
-
-def get_progress_config() -> dict:
-    """Return progress sensor config for Home Assistant discovery."""
-    return {
-        "name": "Pico Update Progress",
-        "unique_id": "pico_update_progress",
-        "state_topic": TOPIC_PROGRESS_STATE,
-        "unit_of_measurement": "%",
-        "icon": "mdi:update",
+        "json_attributes_topic": TOPIC_UPDATE_ATTRIBUTES,
+        "payload_press": "PRESS",
         "availability": {
             "topic": TOPIC_AVAILABILITY,
             "payload_available": "online",
@@ -456,7 +440,6 @@ DISCOVERY_REGISTRY = [
     (TOPIC_ROOM_TEMP_CONFIG, get_room_temp_config),
     (TOPIC_WATER_TEMP_CONFIG, get_water_temp_config),
     (TOPIC_UPDATE_CONFIG, get_update_config),
-    (TOPIC_PROGRESS_CONFIG, get_progress_config),
 ]
 
 # Add ACS37030 current sensor discovery configs
@@ -498,10 +481,22 @@ def publish_led_state() -> None:
     mqtt_publish(TOPIC_LED_STATE, state)
 
 
+def publish_update_attributes(state: str, progress: int) -> None:
+    """Publish button attributes as JSON."""
+    global update_state
+    update_state = state
+    attributes = {
+        "status": state,
+    }
+    mqtt_client.publish(TOPIC_UPDATE_ATTRIBUTES, ujson.dumps(attributes), retain=True)
+
+
 def publish_progress(percent: int, status: str) -> None:
     """Publish progress percentage and status."""
-    mqtt_publish(TOPIC_PROGRESS_STATE, str(percent))
+    global update_state
+    update_state = status
     mqtt_publish(TOPIC_UPDATE_STATE, status)
+    publish_update_attributes(status, percent)
 
 
 # -----------------------------------------------------------------------------
@@ -535,8 +530,10 @@ def on_message(topic: bytes, msg: bytes) -> None:
                 log("UPDATE", "Checking for updates...")
 
                 # Create progress callback for automatic update flow
-                # Note: callback publishes directly, no need to modify module state
+                # Note: callback must update module state via global
                 def progress_callback(percent: int, status: str) -> None:
+                    global update_state
+                    update_state = status
                     publish_progress(percent, status)
 
                 success = check_and_update(GITHUB_OWNER, GITHUB_REPO, progress_callback)
@@ -598,7 +595,7 @@ def connect_mqtt() -> bool:
 
         time.sleep(MQTT_DELAY_INITIAL_STATE)
         publish_led_state()
-        mqtt_publish(TOPIC_UPDATE_STATE, update_state)
+        publish_progress(0, update_state)
         time.sleep(MQTT_DELAY_DISCOVERY)
         publish_all_sensors()
 

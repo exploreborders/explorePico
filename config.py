@@ -75,10 +75,7 @@ TOPIC_AVAILABILITY = "homeassistant/pico/availability"
 TOPIC_UPDATE_COMMAND = "homeassistant/pico/button/update/set"
 TOPIC_UPDATE_STATE = "homeassistant/pico/button/update/state"
 TOPIC_UPDATE_CONFIG = "homeassistant/pico/button/update/config"
-
-# Update Progress Sensor Topics
-TOPIC_PROGRESS_STATE = "homeassistant/pico/sensor/update_progress/state"
-TOPIC_PROGRESS_CONFIG = "homeassistant/pico/sensor/update_progress/config"
+TOPIC_UPDATE_ATTRIBUTES = "homeassistant/pico/button/update/attributes"
 
 # DS18B20 Configuration
 DS18B20_PIN = 22  # GPIO pin for DS18B20 temperature sensors (supports multiple)
