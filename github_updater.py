@@ -172,7 +172,7 @@ def download_and_update(owner: str, repo: str, release_info: dict) -> bool:
 
     log(f"Updating {len(files)} files")
 
-    # Create backup BEFORE updating (like sd_updater does)
+    # Create backup BEFORE updating
     log("Creating backup...")
     if not create_backup():
         log("Backup failed, aborting update!")

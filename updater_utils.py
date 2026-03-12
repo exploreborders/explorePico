@@ -1,7 +1,7 @@
 """
 Shared Updater Utilities for Pico 2W
 
-Common functions for SD Card and GitHub updaters including:
+Common functions for GitHub updater including:
     - Version management (read/write/compare)
     - Backup and restore functionality
     - Rollback detection and execution
