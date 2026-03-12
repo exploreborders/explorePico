@@ -113,6 +113,8 @@ from config import (
     TOPIC_UPDATE_STATE,
     TOPIC_UPDATE_CONFIG,
     TOPIC_UPDATE_ATTRIBUTES,
+    TOPIC_PROGRESS_STATE,
+    TOPIC_PROGRESS_CONFIG,
     TOPIC_AVAILABILITY,
     DEVICE_NAME,
     DEVICE_IDENTIFIER,
@@ -195,7 +197,7 @@ led.off()
 # MQTT state
 mqtt_client = None
 led_state = False
-update_state = "idle"  # idle, checking, available, up_to_date, failed
+update_state = "Update Pico"  # Update Pico, checking, downloading, applying, rebooting, up to date, error
 last_sensor_publish = 0
 _last_mqtt_values = {}
 
@@ -392,6 +394,24 @@ def get_update_config() -> dict:
     }
 
 
+def get_progress_config() -> dict:
+    """Return progress sensor config for Home Assistant discovery."""
+    return {
+        "name": "Pico Update Progress",
+        "unique_id": "pico_update_progress",
+        "state_topic": TOPIC_PROGRESS_STATE,
+        "unit_of_measurement": "%",
+        "icon": "mdi:update",
+        "state_class": "measurement",
+        "availability": {
+            "topic": TOPIC_AVAILABILITY,
+            "payload_available": "online",
+            "payload_not_available": "offline",
+        },
+        "device": get_device_info(),
+    }
+
+
 # -----------------------------------------------------------------------------
 # REGISTRIES
 # -----------------------------------------------------------------------------
@@ -440,6 +460,7 @@ DISCOVERY_REGISTRY = [
     (TOPIC_ROOM_TEMP_CONFIG, get_room_temp_config),
     (TOPIC_WATER_TEMP_CONFIG, get_water_temp_config),
     (TOPIC_UPDATE_CONFIG, get_update_config),
+    (TOPIC_PROGRESS_CONFIG, get_progress_config),
 ]
 
 # Add ACS37030 current sensor discovery configs
@@ -481,8 +502,8 @@ def publish_led_state() -> None:
     mqtt_publish(TOPIC_LED_STATE, state)
 
 
-def publish_update_attributes(state: str, progress: int) -> None:
-    """Publish button attributes as JSON."""
+def publish_update_attributes(state: str) -> None:
+    """Publish button attributes as JSON (status only, no progress)."""
     global update_state
     update_state = state
     attributes = {
@@ -492,11 +513,18 @@ def publish_update_attributes(state: str, progress: int) -> None:
 
 
 def publish_progress(percent: int, status: str) -> None:
-    """Publish progress percentage and status."""
+    """Publish progress to sensor, state to button, attributes to button."""
     global update_state
     update_state = status
+
+    # Publish to progress sensor (with %)
+    mqtt_publish(TOPIC_PROGRESS_STATE, str(percent))
+
+    # Publish to button state
     mqtt_publish(TOPIC_UPDATE_STATE, status)
-    publish_update_attributes(status, percent)
+
+    # Publish button attributes (ONLY status, NO progress)
+    publish_update_attributes(status)
 
 
 # -----------------------------------------------------------------------------
@@ -524,7 +552,7 @@ def on_message(topic: bytes, msg: bytes) -> None:
 
         elif topic_str == TOPIC_UPDATE_COMMAND:
             # Accept PRESS (from HA button) - starts full automatic update process
-            if msg_str in ("CHECK", "PRESS") and update_state == "idle":
+            if msg_str in ("CHECK", "PRESS") and update_state == "Update Pico":
                 update_state = "checking"
                 publish_progress(0, "checking")
                 log("UPDATE", "Checking for updates...")
@@ -540,11 +568,16 @@ def on_message(topic: bytes, msg: bytes) -> None:
 
                 # This only runs if update failed (no reboot)
                 if not success:
-                    if update_state == "up_to_date":
-                        publish_progress(100, "up_to_date")
+                    if update_state == "up to date":
+                        publish_progress(100, "up to date")
+                        # Auto-reset to Update Pico after 5 seconds
+                        time.sleep(5)
+                        publish_progress(0, "Update Pico")
                     else:
                         publish_progress(0, "error")
-                    update_state = "idle"
+                        time.sleep(5)
+                        publish_progress(0, "Update Pico")
+                    update_state = "Update Pico"
 
     except Exception as e:
         log("ERROR", f"Message handling failed: {e}")
@@ -595,7 +628,10 @@ def connect_mqtt() -> bool:
 
         time.sleep(MQTT_DELAY_INITIAL_STATE)
         publish_led_state()
-        publish_progress(0, update_state)
+        # Initial state: progress sensor = 0%, button state = Update Pico
+        mqtt_publish(TOPIC_PROGRESS_STATE, "0")
+        mqtt_publish(TOPIC_UPDATE_STATE, update_state)
+        publish_update_attributes(update_state)
         time.sleep(MQTT_DELAY_DISCOVERY)
         publish_all_sensors()
 

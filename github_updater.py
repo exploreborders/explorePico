@@ -322,7 +322,7 @@ def check_and_update(owner: str, repo: str, progress_callback=None) -> bool:
     if result <= 0:
         log("No update needed")
         if progress_callback:
-            progress_callback(100, "up_to_date")
+            progress_callback(100, "up to date")
         return False
 
     log(f"Update available: {new_version}")
