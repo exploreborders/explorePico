@@ -112,6 +112,8 @@ from config import (
     TOPIC_UPDATE_COMMAND,
     TOPIC_UPDATE_STATE,
     TOPIC_UPDATE_CONFIG,
+    TOPIC_PROGRESS_STATE,
+    TOPIC_PROGRESS_CONFIG,
     TOPIC_AVAILABILITY,
     DEVICE_NAME,
     DEVICE_IDENTIFIER,
@@ -389,6 +391,23 @@ def get_update_config() -> dict:
     }
 
 
+def get_progress_config() -> dict:
+    """Return progress sensor config for Home Assistant discovery."""
+    return {
+        "name": "Pico Update Progress",
+        "unique_id": "pico_update_progress",
+        "state_topic": TOPIC_PROGRESS_STATE,
+        "unit_of_measurement": "%",
+        "icon": "mdi:update",
+        "availability": {
+            "topic": TOPIC_AVAILABILITY,
+            "payload_available": "online",
+            "payload_not_available": "offline",
+        },
+        "device": get_device_info(),
+    }
+
+
 # -----------------------------------------------------------------------------
 # REGISTRIES
 # -----------------------------------------------------------------------------
@@ -437,6 +456,7 @@ DISCOVERY_REGISTRY = [
     (TOPIC_ROOM_TEMP_CONFIG, get_room_temp_config),
     (TOPIC_WATER_TEMP_CONFIG, get_water_temp_config),
     (TOPIC_UPDATE_CONFIG, get_update_config),
+    (TOPIC_PROGRESS_CONFIG, get_progress_config),
 ]
 
 # Add ACS37030 current sensor discovery configs
@@ -478,6 +498,12 @@ def publish_led_state() -> None:
     mqtt_publish(TOPIC_LED_STATE, state)
 
 
+def publish_progress(percent: int, status: str) -> None:
+    """Publish progress percentage and status."""
+    mqtt_publish(TOPIC_PROGRESS_STATE, str(percent))
+    mqtt_publish(TOPIC_UPDATE_STATE, status)
+
+
 # -----------------------------------------------------------------------------
 # MQTT CALLBACKS
 # -----------------------------------------------------------------------------
@@ -502,25 +528,26 @@ def on_message(topic: bytes, msg: bytes) -> None:
             log("LED", msg_str)
 
         elif topic_str == TOPIC_UPDATE_COMMAND:
-            # Accept PRESS (from HA button) or CHECK (manual)
+            # Accept PRESS (from HA button) - starts full automatic update process
             if msg_str in ("CHECK", "PRESS") and update_state == "idle":
                 update_state = "checking"
-                mqtt_publish(TOPIC_UPDATE_STATE, "checking")
+                publish_progress(0, "checking")
                 log("UPDATE", "Checking for updates...")
-                success = check_and_update(GITHUB_OWNER, GITHUB_REPO)
-                if success:
-                    update_state = "available"
-                    mqtt_publish(TOPIC_UPDATE_STATE, "available")
-                else:
-                    update_state = "up_to_date"
-                    mqtt_publish(TOPIC_UPDATE_STATE, "up_to_date")
 
-            # Accept UPDATE or PRESS when update is available
-            elif msg_str in ("UPDATE", "PRESS") and update_state == "available":
-                mqtt_publish(TOPIC_UPDATE_STATE, "rebooting")
-                log("UPDATE", "Rebooting to apply update...")
-                time.sleep(1)
-                machine.reset()
+                # Create progress callback for automatic update flow
+                # Note: callback publishes directly, no need to modify module state
+                def progress_callback(percent: int, status: str) -> None:
+                    publish_progress(percent, status)
+
+                success = check_and_update(GITHUB_OWNER, GITHUB_REPO, progress_callback)
+
+                # This only runs if update failed (no reboot)
+                if not success:
+                    if update_state == "up_to_date":
+                        publish_progress(100, "up_to_date")
+                    else:
+                        publish_progress(0, "error")
+                    update_state = "idle"
 
     except Exception as e:
         log("ERROR", f"Message handling failed: {e}")

@@ -162,8 +162,27 @@ def get_latest_release(owner: str, repo: str) -> dict | None:
     }
 
 
-def download_and_update(owner: str, repo: str, release_info: dict) -> bool:
-    """Download files from GitHub repository and update."""
+def download_and_update(
+    owner: str,
+    repo: str,
+    release_info: dict,
+    progress_callback=None,
+) -> bool:
+    """Download files from GitHub repository and update.
+
+    Args:
+        owner: GitHub repository owner
+        repo: GitHub repository name
+        release_info: Dict with 'tag' and 'files' keys
+        progress_callback: Optional callback(percent: int, status: str) -> None
+
+    Progress stages:
+        0-30%: Downloading files
+        31-60%: Writing files
+        61-90%: Applying update
+        91-99%: Preparing reboot
+        100%: Rebooting
+    """
     log("Downloading files...")
     blink_pattern("11")
 
@@ -177,13 +196,16 @@ def download_and_update(owner: str, repo: str, release_info: dict) -> bool:
     if not create_backup():
         log("Backup failed, aborting update!")
         blink_pattern("111")
+        if progress_callback:
+            progress_callback(0, "error")
         return False
     log("Backup created")
 
     # Track downloaded files for potential rollback
     downloaded_files = []
+    total_files = len(files)
 
-    for file_info in files:
+    for idx, file_info in enumerate(files):
         filename = file_info.get("path", "")
         raw_url = file_info.get("raw_url", "")
 
@@ -200,10 +222,11 @@ def download_and_update(owner: str, repo: str, release_info: dict) -> bool:
 
             if content is None:
                 log(f"Download failed: {filename}")
-                # Rollback: restore original files
                 log("Update failed, restoring backup...")
                 blink_pattern("111")
                 restore_backup()
+                if progress_callback:
+                    progress_callback(0, "error")
                 return False
 
             if not copy_file_content(content, filename):
@@ -211,21 +234,42 @@ def download_and_update(owner: str, repo: str, release_info: dict) -> bool:
                 log("Restoring backup...")
                 blink_pattern("111")
                 restore_backup()
+                if progress_callback:
+                    progress_callback(0, "error")
                 return False
 
             downloaded_files.append(filename)
             log(f"Updated: {filename}")
+
+            # Progress: downloading (0-30%) + writing (31-60%)
+            if progress_callback and total_files > 0:
+                file_progress = int((idx + 1) * 30 / total_files)
+                progress_callback(file_progress, "downloading")
 
         except Exception as e:
             log(f"Failed to update {filename}: {e}")
             log("Restoring backup...")
             blink_pattern("111")
             restore_backup()
+            if progress_callback:
+                progress_callback(0, "error")
             return False
 
-    # All files updated successfully - now write version and reboot
+    # All files updated successfully
+    if progress_callback:
+        progress_callback(65, "applying")
+        time.sleep(0.2)
+        progress_callback(75, "applying")
+        time.sleep(0.2)
+        progress_callback(85, "applying")
+
+    # Write version
     write_version(tag)
     log(f"Updated to {tag}")
+
+    if progress_callback:
+        progress_callback(95, "rebooting")
+
     blink_pattern("11011")
 
     # Give time for log to flush before reset
@@ -235,10 +279,21 @@ def download_and_update(owner: str, repo: str, release_info: dict) -> bool:
     return True
 
 
-def check_and_update(owner: str, repo: str) -> bool:
-    """Check for updates from GitHub and apply if available."""
+def check_and_update(owner: str, repo: str, progress_callback=None) -> bool:
+    """Check for updates from GitHub and apply if available.
+
+    Args:
+        owner: GitHub repository owner
+        repo: GitHub repository name
+        progress_callback: Optional callback(percent: int, status: str) -> None
+
+    Returns:
+        True if update was applied and device will reboot
+    """
     if not is_connected():
         log("WiFi not connected")
+        if progress_callback:
+            progress_callback(0, "error")
         return False
 
     log("Checking GitHub for updates...")
@@ -247,11 +302,15 @@ def check_and_update(owner: str, repo: str) -> bool:
     release = get_latest_release(owner, repo)
     if not release:
         log("No release found or API error")
+        if progress_callback:
+            progress_callback(0, "error")
         return False
 
     new_version = release.get("tag", "")
     if not new_version:
         log("No version in release")
+        if progress_callback:
+            progress_callback(0, "error")
         return False
 
     current = read_version() or "0.0"
@@ -262,11 +321,13 @@ def check_and_update(owner: str, repo: str) -> bool:
 
     if result <= 0:
         log("No update needed")
+        if progress_callback:
+            progress_callback(100, "up_to_date")
         return False
 
     log(f"Update available: {new_version}")
 
-    if download_and_update(owner, repo, release):
+    if download_and_update(owner, repo, release, progress_callback):
         return True
 
     return False
