@@ -72,9 +72,10 @@ TOPIC_CURRENT_5_CONFIG = "homeassistant/pico/sensor/current_5/config"
 TOPIC_AVAILABILITY = "homeassistant/pico/availability"
 
 # Update Entity Topics (HA native update entity)
+# Discovery Topic: homeassistant/update/pico_firmware_update/config
 TOPIC_UPDATE_STATE = "homeassistant/pico/update/state"
 TOPIC_UPDATE_CMD = "homeassistant/pico/update/cmd"
-TOPIC_UPDATE_CONFIG = "homeassistant/pico/update/config"
+TOPIC_UPDATE_CONFIG = "homeassistant/update/pico_firmware_update/config"
 TOPIC_UPDATE_LATEST = "homeassistant/pico/update/latest_version"
 
 # DS18B20 Configuration
