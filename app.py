@@ -379,6 +379,7 @@ def get_update_entity_config() -> dict:
     """Return update entity config for Home Assistant discovery."""
     return {
         "platform": "update",
+        "title": "Pico Firmware",
         "name": "Pico Firmware",
         "unique_id": "pico_firmware_update",
         "state_topic": TOPIC_UPDATE_STATE,
