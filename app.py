@@ -48,7 +48,7 @@ import micropython
 
 from blink import blink_pattern, led
 from wifi_utils import scan_and_connect, is_connected
-from updater_utils import log
+from updater_utils import log, read_version
 from github_updater import check_and_update
 from sensors import DS18B20, DS18B20Manager, ACS37030, ACS37030Manager
 from sensors.ads1115 import ADS1115
@@ -109,12 +109,10 @@ from config import (
     TOPIC_CURRENT_4_CONFIG,
     TOPIC_CURRENT_5_STATE,
     TOPIC_CURRENT_5_CONFIG,
-    TOPIC_UPDATE_COMMAND,
+    TOPIC_UPDATE_CMD,
     TOPIC_UPDATE_STATE,
     TOPIC_UPDATE_CONFIG,
-    TOPIC_UPDATE_ATTRIBUTES,
-    TOPIC_PROGRESS_STATE,
-    TOPIC_PROGRESS_CONFIG,
+    TOPIC_UPDATE_LATEST,
     TOPIC_AVAILABILITY,
     DEVICE_NAME,
     DEVICE_IDENTIFIER,
@@ -197,7 +195,8 @@ led.off()
 # MQTT state
 mqtt_client = None
 led_state = False
-update_state = "Update Pico"  # Update Pico, checking, downloading, applying, rebooting, up to date, error
+update_state = "Update Pico"  # Update Pico, checking, downloading, applying, rebooting, up_to_date, error
+latest_version_received = None  # Latest version from GitHub webhook
 last_sensor_publish = 0
 _last_mqtt_values = {}
 
@@ -376,33 +375,15 @@ def get_current_config(index: int) -> dict:
     }
 
 
-def get_update_config() -> dict:
-    """Return update button config for Home Assistant discovery."""
+def get_update_entity_config() -> dict:
+    """Return update entity config for Home Assistant discovery."""
     return {
-        "name": "Pico Update",
-        "unique_id": "pico_update",
-        "command_topic": TOPIC_UPDATE_COMMAND,
+        "name": "Pico Firmware",
+        "unique_id": "pico_firmware_update",
         "state_topic": TOPIC_UPDATE_STATE,
-        "json_attributes_topic": TOPIC_UPDATE_ATTRIBUTES,
-        "payload_press": "PRESS",
-        "availability": {
-            "topic": TOPIC_AVAILABILITY,
-            "payload_available": "online",
-            "payload_not_available": "offline",
-        },
-        "device": get_device_info(),
-    }
-
-
-def get_progress_config() -> dict:
-    """Return progress sensor config for Home Assistant discovery."""
-    return {
-        "name": "Pico Update Progress",
-        "unique_id": "pico_update_progress",
-        "state_topic": TOPIC_PROGRESS_STATE,
-        "unit_of_measurement": "%",
-        "icon": "mdi:update",
-        "state_class": "measurement",
+        "command_topic": TOPIC_UPDATE_CMD,
+        "payload_install": "PRESS",
+        "device_class": "firmware",
         "availability": {
             "topic": TOPIC_AVAILABILITY,
             "payload_available": "online",
@@ -459,8 +440,7 @@ DISCOVERY_REGISTRY = [
     (TOPIC_TEMP_CONFIG, get_temp_config),
     (TOPIC_ROOM_TEMP_CONFIG, get_room_temp_config),
     (TOPIC_WATER_TEMP_CONFIG, get_water_temp_config),
-    (TOPIC_UPDATE_CONFIG, get_update_config),
-    (TOPIC_PROGRESS_CONFIG, get_progress_config),
+    (TOPIC_UPDATE_CONFIG, get_update_entity_config),
 ]
 
 
@@ -511,29 +491,47 @@ def publish_led_state() -> None:
     mqtt_publish(TOPIC_LED_STATE, state)
 
 
-def publish_update_attributes(state: str) -> None:
-    """Publish button attributes as JSON (status only, no progress)."""
-    global update_state
-    update_state = state
-    attributes = {
-        "status": state,
+def publish_version(
+    installed_version: str,
+    latest_version: str = None,
+    in_progress: bool = False,
+    percentage: int = None,
+) -> None:
+    """Publish version info to HA update entity.
+
+    Args:
+        installed_version: Current installed firmware version
+        latest_version: Latest available version (from GitHub webhook)
+        in_progress: True if update is currently running
+        percentage: Update progress 0-100 (optional)
+    """
+    global latest_version_received
+
+    if latest_version:
+        latest_version_received = latest_version
+
+    state = {
+        "installed_version": installed_version,
+        "latest_version": latest_version_received
+        if latest_version_received
+        else installed_version,
+        "in_progress": in_progress,
     }
-    mqtt_client.publish(TOPIC_UPDATE_ATTRIBUTES, ujson.dumps(attributes), retain=True)
+
+    if percentage is not None:
+        state["update_percentage"] = percentage
+
+    mqtt_client.publish(TOPIC_UPDATE_STATE, ujson.dumps(state), retain=True)
 
 
-def publish_progress(percent: int, status: str) -> None:
-    """Publish progress to sensor, state to button, attributes to button."""
-    global update_state
-    update_state = status
-
-    # Publish to progress sensor (with %)
-    mqtt_publish(TOPIC_PROGRESS_STATE, str(percent))
-
-    # Publish to button state
-    mqtt_publish(TOPIC_UPDATE_STATE, status)
-
-    # Publish button attributes (ONLY status, NO progress)
-    publish_update_attributes(status)
+def update_version_received(latest: str) -> None:
+    """Handle new version received from GitHub webhook."""
+    global latest_version_received
+    latest_version_received = latest
+    log("UPDATE", f"Latest version received: {latest}")
+    # Publish updated version info
+    current = read_version() or "0.0"
+    publish_version(current, latest, False)
 
 
 # -----------------------------------------------------------------------------
@@ -559,34 +557,48 @@ def on_message(topic: bytes, msg: bytes) -> None:
             publish_led_state()
             log("LED", msg_str)
 
-        elif topic_str == TOPIC_UPDATE_COMMAND:
-            # Accept PRESS (from HA button) - starts full automatic update process
-            if msg_str in ("CHECK", "PRESS") and update_state == "Update Pico":
-                update_state = "checking"
-                publish_progress(0, "checking")
-                log("UPDATE", "Checking for updates...")
+        elif topic_str == TOPIC_UPDATE_CMD:
+            # User clicked "Update installieren" in HA
+            if msg_str in ("PRESS", "INSTALL") and update_state == "Update Pico":
+                log("UPDATE", "Starting update from HA...")
 
-                # Create progress callback for automatic update flow
-                # Note: callback must update module state via global
+                # Progress callback for update process
                 def progress_callback(percent: int, status: str) -> None:
                     global update_state
                     update_state = status
-                    publish_progress(percent, status)
+                    current = read_version() or "0.0"
+                    latest = latest_version_received or current
+                    in_progress = status not in ("up_to_date", "error")
+                    publish_version(
+                        current, latest, in_progress, percent if in_progress else None
+                    )
 
+                # Start update process
                 success = check_and_update(GITHUB_OWNER, GITHUB_REPO, progress_callback)
 
                 # This only runs if update failed (no reboot)
                 if not success:
-                    if update_state == "up to date":
-                        publish_progress(100, "up to date")
-                        # Auto-reset to Update Pico after 5 seconds
+                    current = read_version() or "0.0"
+                    latest = latest_version_received or current
+                    if update_state == "up_to_date":
+                        publish_version(current, latest, False, 100)
                         time.sleep(5)
-                        publish_progress(0, "Update Pico")
+                        publish_version(current, latest, False)
                     else:
-                        publish_progress(0, "error")
+                        publish_version(current, latest, False, 0)
                         time.sleep(5)
-                        publish_progress(0, "Update Pico")
+                        publish_version(current, latest, False)
                     update_state = "Update Pico"
+
+        elif topic_str == TOPIC_UPDATE_LATEST:
+            # GitHub webhook sent new latest version
+            try:
+                latest = msg.decode().strip().lstrip("v")
+                if latest:
+                    log("UPDATE", f"New version available: {latest}")
+                    update_version_received(latest)
+            except Exception as e:
+                log("ERROR", f"Failed to parse latest version: {e}")
 
     except Exception as e:
         log("ERROR", f"Message handling failed: {e}")
@@ -628,7 +640,8 @@ def connect_mqtt() -> bool:
 
         time.sleep(MQTT_DELAY_CONNECT)
         mqtt_client.subscribe(TOPIC_LED_COMMAND)
-        mqtt_client.subscribe(TOPIC_UPDATE_COMMAND)
+        mqtt_client.subscribe(TOPIC_UPDATE_CMD)
+        mqtt_client.subscribe(TOPIC_UPDATE_LATEST)
         log("MQTT", "Subscribed!")
 
         time.sleep(MQTT_DELAY_SUBSCRIBE)
@@ -637,10 +650,9 @@ def connect_mqtt() -> bool:
 
         time.sleep(MQTT_DELAY_INITIAL_STATE)
         publish_led_state()
-        # Initial state: progress sensor = 0%, button state = Update Pico
-        mqtt_publish(TOPIC_PROGRESS_STATE, "0")
-        mqtt_publish(TOPIC_UPDATE_STATE, update_state)
-        publish_update_attributes(update_state)
+        # Initial version publish: read from flash and send to HA
+        current_version = read_version() or "0.0"
+        publish_version(current_version, current_version, False)
         time.sleep(MQTT_DELAY_DISCOVERY)
         publish_all_sensors()
 
