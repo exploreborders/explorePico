@@ -178,7 +178,7 @@ class ACS37030Manager:
         self._ever_connected = False
 
         self._raw_buffer = []
-        self._buffer_size = buffer_size
+        self._buffer_size = buffer_size  # Buffer is limited to buffer_size
 
     def set_logger(self, logger) -> None:
         """Set logging function.

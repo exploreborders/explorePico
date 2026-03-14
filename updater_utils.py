@@ -16,7 +16,6 @@ Version Management:
 Backup/Restore:
     - create_backup(): Backup all Python files before update
     - restore_backup(): Restore files from backup
-    - cleanup_backup(): Remove backup folder
     - copy_file_content(): Write file with directory creation
 
 Rollback:
@@ -285,28 +284,6 @@ def restore_backup() -> bool:
         return False
 
 
-def cleanup_backup() -> None:
-    """Remove backup folder."""
-    try:
-        files = uos.listdir(BACKUP_FOLDER)
-        for f in files:
-            path = f"{BACKUP_FOLDER}/{f}"
-            try:
-                stat = uos.stat(path)
-                if stat[0] & 0x4000:  # Directory
-                    subfiles = uos.listdir(path)
-                    for sf in subfiles:
-                        uos.remove(f"{path}/{sf}")
-                    uos.rmdir(path)
-                else:
-                    uos.remove(path)
-            except Exception:
-                pass
-        uos.rmdir(BACKUP_FOLDER)
-    except Exception:
-        pass
-
-
 def copy_file_content(content: str, filename: str) -> bool:
     """Write file content to destination, creating directories if needed."""
     try:
@@ -381,7 +358,7 @@ def perform_rollback() -> bool:
         except Exception:
             pass
 
-        cleanup_backup()
+        _remove_backup_folder()
 
         log("Rollback complete")
         blink_pattern("11011")

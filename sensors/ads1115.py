@@ -245,7 +245,7 @@ class ADS1115:
                 )
 
                 self._write_config(config)
-                time.sleep(0.1)
+                time.sleep(0.15)
 
                 raw = self._read_conversion()
 
