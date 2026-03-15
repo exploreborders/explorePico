@@ -1,0 +1,114 @@
+# Pico 2W LTE Sensors for Home Assistant
+#
+# This package adds the following sensors from the SIM7600G-H LTE module:
+#   - Connection Type (LTE/WiFi/offline)
+#   - Signal RSSI (dBm)
+#   - Signal Quality (text)
+#   - Network Operator
+#   - Network Type
+#   - GPS Latitude
+#   - GPS Longitude
+#
+# Installation:
+#   1. Copy this file to your Home Assistant config/packages/ directory
+#   2. Add to configuration.yaml:
+#        homeassistant:
+#          packages: !include_dir_named packages
+#   3. Restart Home Assistant
+
+mqtt:
+  sensor:
+    # Connection Type (LTE/WiFi/offline)
+    - name: "Pico Connection Type"
+      unique_id: "pico_connection_type"
+      state_topic: "homeassistant/pico/sensor/connection_type"
+      availability:
+        topic: "homeassistant/pico/availability"
+        payload_available: "online"
+        payload_not_available: "offline"
+      device:
+        identifiers:
+          - pico2w
+        name: "Raspberry Pi Pico 2W"
+
+    # Signal RSSI (dBm)
+    - name: "Pico Signal RSSI"
+      unique_id: "pico_signal_rssi"
+      state_topic: "homeassistant/pico/sensor/signal_rssi"
+      unit_of_measurement: "dBm"
+      device_class: "signal_strength"
+      availability:
+        topic: "homeassistant/pico/availability"
+        payload_available: "online"
+        payload_not_available: "offline"
+      device:
+        identifiers:
+          - pico2w
+        name: "Raspberry Pi Pico 2W"
+
+    # Signal Quality (text)
+    - name: "Pico Signal Quality"
+      unique_id: "pico_signal_quality"
+      state_topic: "homeassistant/pico/sensor/signal_quality"
+      availability:
+        topic: "homeassistant/pico/availability"
+        payload_available: "online"
+        payload_not_available: "offline"
+      device:
+        identifiers:
+          - pico2w
+        name: "Raspberry Pi Pico 2W"
+
+    # Network Operator
+    - name: "Pico Network Operator"
+      unique_id: "pico_network_operator"
+      state_topic: "homeassistant/pico/sensor/network_operator"
+      availability:
+        topic: "homeassistant/pico/availability"
+        payload_available: "online"
+        payload_not_available: "offline"
+      device:
+        identifiers:
+          - pico2w
+        name: "Raspberry Pi Pico 2W"
+
+    # Network Type (4G/3G/2G)
+    - name: "Pico Network Type"
+      unique_id: "pico_network_type"
+      state_topic: "homeassistant/pico/sensor/network_type"
+      availability:
+        topic: "homeassistant/pico/availability"
+        payload_available: "online"
+        payload_not_available: "offline"
+      device:
+        identifiers:
+          - pico2w
+        name: "Raspberry Pi Pico 2W"
+
+    # GPS Latitude
+    - name: "Pico GPS Latitude"
+      unique_id: "pico_gps_latitude"
+      state_topic: "homeassistant/pico/sensor/gps_latitude"
+      unit_of_measurement: "°"
+      availability:
+        topic: "homeassistant/pico/availability"
+        payload_available: "online"
+        payload_not_available: "offline"
+      device:
+        identifiers:
+          - pico2w
+        name: "Raspberry Pi Pico 2W"
+
+    # GPS Longitude
+    - name: "Pico GPS Longitude"
+      unique_id: "pico_gps_longitude"
+      state_topic: "homeassistant/pico/sensor/gps_longitude"
+      unit_of_measurement: "°"
+      availability:
+        topic: "homeassistant/pico/availability"
+        payload_available: "online"
+        payload_not_available: "offline"
+      device:
+        identifiers:
+          - pico2w
+        name: "Raspberry Pi Pico 2W"
