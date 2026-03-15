@@ -108,14 +108,14 @@ RECONNECT_DELAY_S = 5
 TEMP_CONVERSION_TIME_MS = 750  # DS18B20 conversion time
 SENSOR_RETRY_INTERVAL_MS = 60000  # Retry failed sensor init every 60s
 
-# MQTT Timing Delays
-MQTT_DELAY_DISCOVERY = 0.2  # Between discovery publishes
-MQTT_DELAY_CONNECT = 0.3  # After connect, before subscribe
-MQTT_DELAY_SUBSCRIBE = 0.3  # After subscribe, before discovery
-MQTT_DELAY_INITIAL_STATE = 0.2  # After discovery, before initial state
+# MQTT Timing Delays (increased for LTE/SSL stability)
+MQTT_DELAY_DISCOVERY = 0.8  # Between discovery publishes
+MQTT_DELAY_CONNECT = 2.0  # After connect, before subscribe
+MQTT_DELAY_SUBSCRIBE = 1.0  # After subscribe, before discovery
+MQTT_DELAY_INITIAL_STATE = 1.0  # After discovery, before initial state
 MQTT_LOOP_DELAY = 0.1  # Main loop iteration delay
 ERROR_DELAY_SHORT = 1.0  # After minor error
-ERROR_DELAY_LONG = 2.0  # After serious error/connection lost
+ERROR_DELAY_LONG = 3.0  # After serious error/connection lost
 
 # Rollback Button Configuration
 UPDATE_BUTTON_PIN = 10  # GPIO pin for rollback trigger (double-press at boot)
@@ -123,6 +123,65 @@ UPDATE_BUTTON_PIN = 10  # GPIO pin for rollback trigger (double-press at boot)
 # GitHub WiFi Updater Configuration
 GITHUB_OWNER = "exploreborders"
 GITHUB_REPO = "explorePico"
+
+# -----------------------------------------------------------------------------
+# LTE / SIM7600G-H Configuration
+# -----------------------------------------------------------------------------
+# Wiring: SIM7600 TXD→GP1, RXD→GP0, VIO→3V3, VBUS→5V
+# See AGENTS.md for complete wiring diagram
+LTE_ENABLED = True
+LTE_UART_ID = 0
+LTE_TX_PIN = 0  # GP0 → SIM7600 RXD (NOTE: TX/RX crossed!)
+LTE_RX_PIN = 1  # GP1 → SIM7600 TXD
+LTE_BAUD = 115200  # Default baud rate
+LTE_APN = "internet"  # O2 APN
+LTE_SIM_PIN = "5046"  # O2 SIM PIN
+LTE_SYNC_TIME_ON_BOOT = True
+LTE_CONNECT_TIMEOUT_MS = 90000
+
+# GPS Configuration
+ENABLE_GPS = True
+GPS_UPDATE_INTERVAL_MS = 30000
+
+# Signal & Network Update Intervals
+SIGNAL_UPDATE_INTERVAL_MS = 60000
+NETWORK_INFO_UPDATE_INTERVAL_MS = 300000
+
+# Connection Priority (try first, fallback second)
+PRIMARY_CONNECTION = "LTE"
+FALLBACK_CONNECTION = "WIFI"
+WIFI_ENABLED_WHEN_LTE_UP = True
+
+# -----------------------------------------------------------------------------
+# LTE/GPS/Network MQTT Topics
+# -----------------------------------------------------------------------------
+TOPIC_CONNECTION_TYPE = "homeassistant/pico/sensor/connection_type"
+TOPIC_CONNECTION_CONFIG = "homeassistant/pico/sensor/connection_type/config"
+
+TOPIC_SIGNAL_RSSI = "homeassistant/pico/sensor/signal_rssi"
+TOPIC_SIGNAL_RSSI_CONFIG = "homeassistant/pico/sensor/signal_rssi/config"
+TOPIC_SIGNAL_QUALITY = "homeassistant/pico/sensor/signal_quality"
+TOPIC_SIGNAL_QUALITY_CONFIG = "homeassistant/pico/sensor/signal_quality/config"
+
+TOPIC_NETWORK_OPERATOR = "homeassistant/pico/sensor/network_operator"
+TOPIC_NETWORK_OPERATOR_CONFIG = "homeassistant/pico/sensor/network_operator/config"
+TOPIC_NETWORK_TYPE = "homeassistant/pico/sensor/network_type"
+TOPIC_NETWORK_TYPE_CONFIG = "homeassistant/pico/sensor/network_type/config"
+TOPIC_NETWORK_REGISTERED = "homeassistant/pico/sensor/network_registered"
+TOPIC_NETWORK_REGISTERED_CONFIG = "homeassistant/pico/sensor/network_registered/config"
+
+TOPIC_GPS_LATITUDE = "homeassistant/pico/sensor/gps_latitude"
+TOPIC_GPS_LATITUDE_CONFIG = "homeassistant/pico/sensor/gps_latitude/config"
+TOPIC_GPS_LONGITUDE = "homeassistant/pico/sensor/gps_longitude"
+TOPIC_GPS_LONGITUDE_CONFIG = "homeassistant/pico/sensor/gps_longitude/config"
+TOPIC_GPS_ALTITUDE = "homeassistant/pico/sensor/gps_altitude"
+TOPIC_GPS_ALTITUDE_CONFIG = "homeassistant/pico/sensor/gps_altitude/config"
+TOPIC_GPS_SPEED = "homeassistant/pico/sensor/gps_speed"
+TOPIC_GPS_SPEED_CONFIG = "homeassistant/pico/sensor/gps_speed/config"
+TOPIC_GPS_SATELLITES = "homeassistant/pico/sensor/gps_satellites"
+TOPIC_GPS_SATELLITES_CONFIG = "homeassistant/pico/sensor/gps_satellites/config"
+
+TOPIC_GPS_INTERVAL_SET = "homeassistant/pico/gps/set_interval"
 
 # Try to import from secrets.py, fallback to this file for development
 try:

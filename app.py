@@ -53,6 +53,18 @@ from github_updater import check_and_update
 from sensors import DS18B20, DS18B20Manager, ACS37030, ACS37030Manager
 from sensors.ads1115 import ADS1115
 
+try:
+    from lte_utils import (
+        is_lte_connected,
+        get_gps_location,
+        get_signal_info,
+        get_network_info,
+    )
+
+    LTE_AVAILABLE = True
+except Exception:
+    LTE_AVAILABLE = False
+
 from config import (
     WIFI_SSID,
     WIFI_PASSWORD,
@@ -117,6 +129,22 @@ from config import (
     DEVICE_NAME,
     DEVICE_IDENTIFIER,
     INTERNAL_TEMP_ADC_PIN,
+    ENABLE_GPS,
+    GPS_UPDATE_INTERVAL_MS,
+    SIGNAL_UPDATE_INTERVAL_MS,
+    NETWORK_INFO_UPDATE_INTERVAL_MS,
+    TOPIC_CONNECTION_TYPE,
+    TOPIC_SIGNAL_RSSI,
+    TOPIC_SIGNAL_QUALITY,
+    TOPIC_NETWORK_OPERATOR,
+    TOPIC_NETWORK_TYPE,
+    TOPIC_NETWORK_REGISTERED,
+    TOPIC_GPS_LATITUDE,
+    TOPIC_GPS_LONGITUDE,
+    TOPIC_GPS_ALTITUDE,
+    TOPIC_GPS_SPEED,
+    TOPIC_GPS_SATELLITES,
+    TOPIC_GPS_INTERVAL_SET,
 )
 
 # -----------------------------------------------------------------------------
@@ -199,6 +227,13 @@ update_state = "Update Pico"  # Update Pico, checking, downloading, applying, re
 latest_version_received = None  # Latest version from GitHub webhook
 last_sensor_publish = 0
 _last_mqtt_values = {}
+
+# LTE/GPS state
+gps_update_interval_ms = GPS_UPDATE_INTERVAL_MS
+last_gps_publish = 0
+last_signal_publish = 0
+last_network_publish = 0
+connection_type = "offline"
 
 
 # -----------------------------------------------------------------------------
@@ -396,6 +431,120 @@ def get_update_entity_config() -> dict:
 
 
 # -----------------------------------------------------------------------------
+# LTE/GPS Sensor Configs
+# -----------------------------------------------------------------------------
+def get_connection_type_config() -> dict:
+    """Return connection type sensor config."""
+    return {
+        "name": "Connection Type",
+        "unique_id": "pico_connection_type",
+        "state_topic": TOPIC_CONNECTION_TYPE,
+        "availability": {
+            "topic": TOPIC_AVAILABILITY,
+            "payload_available": "online",
+            "payload_not_available": "offline",
+        },
+        "device": get_device_info(),
+    }
+
+
+def get_signal_rssi_config() -> dict:
+    """Return signal RSSI sensor config."""
+    return {
+        "name": "Signal RSSI",
+        "unique_id": "pico_signal_rssi",
+        "state_topic": TOPIC_SIGNAL_RSSI,
+        "unit_of_measurement": "dBm",
+        "device_class": "signal_strength",
+        "availability": {
+            "topic": TOPIC_AVAILABILITY,
+            "payload_available": "online",
+            "payload_not_available": "offline",
+        },
+        "device": get_device_info(),
+    }
+
+
+def get_signal_quality_config() -> dict:
+    """Return signal quality sensor config."""
+    return {
+        "name": "Signal Quality",
+        "unique_id": "pico_signal_quality",
+        "state_topic": TOPIC_SIGNAL_QUALITY,
+        "availability": {
+            "topic": TOPIC_AVAILABILITY,
+            "payload_available": "online",
+            "payload_not_available": "offline",
+        },
+        "device": get_device_info(),
+    }
+
+
+def get_network_operator_config() -> dict:
+    """Return network operator sensor config."""
+    return {
+        "name": "Network Operator",
+        "unique_id": "pico_network_operator",
+        "state_topic": TOPIC_NETWORK_OPERATOR,
+        "availability": {
+            "topic": TOPIC_AVAILABILITY,
+            "payload_available": "online",
+            "payload_not_available": "offline",
+        },
+        "device": get_device_info(),
+    }
+
+
+def get_network_type_config() -> dict:
+    """Return network type sensor config."""
+    return {
+        "name": "Network Type",
+        "unique_id": "pico_network_type",
+        "state_topic": TOPIC_NETWORK_TYPE,
+        "availability": {
+            "topic": TOPIC_AVAILABILITY,
+            "payload_available": "online",
+            "payload_not_available": "offline",
+        },
+        "device": get_device_info(),
+    }
+
+
+def get_gps_latitude_config() -> dict:
+    """Return GPS latitude sensor config."""
+    return {
+        "name": "GPS Latitude",
+        "unique_id": "pico_gps_latitude",
+        "state_topic": TOPIC_GPS_LATITUDE,
+        "unit_of_measurement": "°",
+        "device_class": "latitude",
+        "availability": {
+            "topic": TOPIC_AVAILABILITY,
+            "payload_available": "online",
+            "payload_not_available": "offline",
+        },
+        "device": get_device_info(),
+    }
+
+
+def get_gps_longitude_config() -> dict:
+    """Return GPS longitude sensor config."""
+    return {
+        "name": "GPS Longitude",
+        "unique_id": "pico_gps_longitude",
+        "state_topic": TOPIC_GPS_LONGITUDE,
+        "unit_of_measurement": "°",
+        "device_class": "longitude",
+        "availability": {
+            "topic": TOPIC_AVAILABILITY,
+            "payload_available": "online",
+            "payload_not_available": "offline",
+        },
+        "device": get_device_info(),
+    }
+
+
+# -----------------------------------------------------------------------------
 # REGISTRIES
 # -----------------------------------------------------------------------------
 SENSOR_REGISTRY = [
@@ -461,6 +610,10 @@ if ENABLE_ACS37030:
     for i in range(len(current_sensors)):
         _, config_topic, _, _ = CURRENT_TOPICS[i]
         DISCOVERY_REGISTRY.append((config_topic, _make_current_config(i)))
+
+# Note: LTE/GPS sensors publish values but are NOT in auto-discovery
+# This reduces MQTT traffic over SSL/LTE to prevent disconnects (-104 error)
+# Connection type, signal, network, and GPS can be added manually in HA
 
 
 # -----------------------------------------------------------------------------
@@ -602,6 +755,19 @@ def on_message(topic: bytes, msg: bytes) -> None:
             except Exception as e:
                 log("ERROR", f"Failed to parse latest version: {e}")
 
+        elif topic_str == TOPIC_GPS_INTERVAL_SET:
+            # Set GPS update interval from Home Assistant
+            global gps_update_interval_ms
+            try:
+                interval_seconds = int(msg.decode().strip())
+                if 10 <= interval_seconds <= 3600:
+                    gps_update_interval_ms = interval_seconds * 1000
+                    log("GPS", f"Interval set to {interval_seconds}s")
+                else:
+                    log("GPS", "Interval must be 10-3600 seconds")
+            except Exception as e:
+                log("ERROR", f"Failed to parse GPS interval: {e}")
+
     except Exception as e:
         log("ERROR", f"Message handling failed: {e}")
 
@@ -637,6 +803,7 @@ def connect_mqtt() -> bool:
     try:
         mqtt_client = create_mqtt_client()
         mqtt_client.connect()
+        time.sleep(1)  # Wait for SSL handshake to complete
         mqtt_client.publish(TOPIC_AVAILABILITY, "online", retain=True)
         log("MQTT", "Connected!")
 
@@ -644,19 +811,23 @@ def connect_mqtt() -> bool:
         mqtt_client.subscribe(TOPIC_LED_COMMAND)
         mqtt_client.subscribe(TOPIC_UPDATE_CMD)
         mqtt_client.subscribe(TOPIC_UPDATE_LATEST)
+        mqtt_client.subscribe(TOPIC_GPS_INTERVAL_SET)
         log("MQTT", "Subscribed!")
 
         time.sleep(MQTT_DELAY_SUBSCRIBE)
         publish_discovery()
+        time.sleep(2)  # Extra delay for SSL stability after discovery
         log("MQTT", "Discovery published!")
 
         time.sleep(MQTT_DELAY_INITIAL_STATE)
         publish_led_state()
+        time.sleep(0.5)
         # Initial version publish: read from flash and send to HA
         current_version = read_version() or "0.0"
         publish_version(current_version, current_version, False)
-        time.sleep(MQTT_DELAY_DISCOVERY)
+        time.sleep(0.5)
         publish_all_sensors()
+        time.sleep(0.5)  # Extra delay after sensor publish
 
         log("MQTT", "Ready!")
         blink_pattern("1010")
@@ -701,6 +872,73 @@ def handle_sensor_publish() -> None:
         last_sensor_publish = now
 
 
+def handle_connection_type_publish() -> None:
+    """Publish connection type (LTE/WiFi/offline)."""
+    global connection_type
+
+    if LTE_AVAILABLE and is_lte_connected():
+        connection_type = "LTE"
+    elif is_connected():
+        connection_type = "WiFi"
+    else:
+        connection_type = "offline"
+
+    mqtt_publish(TOPIC_CONNECTION_TYPE, connection_type)
+
+
+def handle_lte_signal_publish() -> None:
+    """Publish LTE signal quality if LTE is connected."""
+    global last_signal_publish
+
+    if not LTE_AVAILABLE or not is_lte_connected():
+        return
+
+    now = time.ticks_ms()
+    if time.ticks_diff(now, last_signal_publish) >= SIGNAL_UPDATE_INTERVAL_MS:
+        signal = get_signal_info()
+        mqtt_publish(TOPIC_SIGNAL_RSSI, str(signal.get("rssi", 0)))
+        mqtt_publish(TOPIC_SIGNAL_QUALITY, signal.get("quality", "unknown"))
+        last_signal_publish = now
+
+
+def handle_lte_network_publish() -> None:
+    """Publish LTE network info if LTE is connected."""
+    global last_network_publish
+
+    if not LTE_AVAILABLE or not is_lte_connected():
+        return
+
+    now = time.ticks_ms()
+    if time.ticks_diff(now, last_network_publish) >= NETWORK_INFO_UPDATE_INTERVAL_MS:
+        network = get_network_info()
+        mqtt_publish(TOPIC_NETWORK_OPERATOR, network.get("operator", ""))
+        mqtt_publish(TOPIC_NETWORK_TYPE, network.get("type", ""))
+        mqtt_publish(
+            TOPIC_NETWORK_REGISTERED,
+            "registered" if network.get("registered") else "searching",
+        )
+        last_network_publish = now
+
+
+def handle_gps_publish() -> None:
+    """Publish GPS location if LTE is connected and GPS enabled."""
+    global last_gps_publish
+
+    if not LTE_AVAILABLE or not is_lte_connected() or not ENABLE_GPS:
+        return
+
+    now = time.ticks_ms()
+    if time.ticks_diff(now, last_gps_publish) >= gps_update_interval_ms:
+        gps = get_gps_location()
+        if gps:
+            mqtt_publish(TOPIC_GPS_LATITUDE, str(gps.get("latitude", 0)))
+            mqtt_publish(TOPIC_GPS_LONGITUDE, str(gps.get("longitude", 0)))
+            mqtt_publish(TOPIC_GPS_ALTITUDE, str(gps.get("altitude", 0)))
+            mqtt_publish(TOPIC_GPS_SPEED, str(gps.get("speed", 0)))
+            mqtt_publish(TOPIC_GPS_SATELLITES, str(gps.get("satellites", 0)))
+        last_gps_publish = now
+
+
 def run_main_loop() -> None:
     """Run the main MQTT loop."""
     global mqtt_client
@@ -708,9 +946,14 @@ def run_main_loop() -> None:
     try:
         handle_mqtt_message()
         handle_sensor_publish()
+        handle_connection_type_publish()
+        handle_lte_signal_publish()
+        handle_lte_network_publish()
+        handle_gps_publish()
         time.sleep(MQTT_LOOP_DELAY)
 
     except OSError as e:
+        err_str = str(e)
         log("WARN", f"Connection lost: {e}")
         blink_pattern("111")
         disconnect_mqtt()
@@ -718,8 +961,14 @@ def run_main_loop() -> None:
 
     except Exception as e:
         err_str = str(e)
-        if "closed" in err_str.lower() or "ECONNRESET" in err_str:
-            log("WARN", "Connection closed by broker")
+        # Check for SSL-specific errors
+        if (
+            "-104" in err_str
+            or "SSL" in err_str
+            or "closed" in err_str.lower()
+            or "ECONNRESET" in err_str
+        ):
+            log("WARN", f"SSL/Connection error: {e}")
             blink_pattern("111")
             disconnect_mqtt()
             time.sleep(ERROR_DELAY_LONG)
