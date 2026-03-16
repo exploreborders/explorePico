@@ -847,6 +847,92 @@ class SIM7600:
             self._log(f"GPS parse error: {e}")
             return None
 
+    def get_gps_cgnssinfo(self) -> dict | None:
+        """Get extended GPS info using AT+CGNSSINFO command.
+
+        Returns extended GPS data including visible satellites, HDOP, VDOP.
+
+        Returns:
+            Dict with satellites, hdop, vdop or None
+        """
+        response = self.send_at("AT+CGNSSINFO", timeout=3000)
+
+        if "+CGNSSINFO:" not in response or response == "ERROR":
+            return None
+
+        try:
+            start = response.find("+CGNSSINFO:") + 12
+            data = response[start:].strip()
+
+            if not data:
+                return None
+
+            parts = data.split(",")
+
+            if len(parts) < 12:
+                return None
+
+            gps_visible = int(parts[1].strip()) if parts[1].strip() else 0
+            glonass_visible = int(parts[2].strip()) if parts[2].strip() else 0
+            beidou_visible = int(parts[3].strip()) if parts[3].strip() else 0
+
+            lat_raw = parts[4].strip() if len(parts) > 4 else ""
+            lat_dir = parts[5].strip() if len(parts) > 5 else ""
+            lon_raw = parts[6].strip() if len(parts) > 6 else ""
+            lon_dir = parts[7].strip() if len(parts) > 7 else ""
+            date = parts[8].strip() if len(parts) > 8 else ""
+            time_raw = parts[9].strip() if len(parts) > 9 else ""
+            alt = (
+                float(parts[10].strip())
+                if len(parts) > 10 and parts[10].strip()
+                else 0.0
+            )
+            speed = (
+                float(parts[11].strip())
+                if len(parts) > 11 and parts[11].strip()
+                else 0.0
+            )
+
+            course = 0.0
+            if len(parts) > 12 and parts[12].strip():
+                course = float(parts[12].strip())
+
+            hdop = 0.0
+            if len(parts) > 14 and parts[14].strip():
+                hdop = float(parts[14].strip())
+
+            vdop = 0.0
+            if len(parts) > 15 and parts[15].strip():
+                vdop = float(parts[15].strip())
+
+            if not lat_raw or not lon_raw:
+                return None
+
+            lat = self._convert_nmea_lat(lat_raw, lat_dir)
+            lon = self._convert_nmea_lon(lon_raw, lon_dir)
+
+            total_visible = gps_visible + glonass_visible + beidou_visible
+
+            return {
+                "latitude": lat,
+                "longitude": lon,
+                "altitude": alt,
+                "speed": speed,
+                "course": course,
+                "hdop": hdop,
+                "vdop": vdop,
+                "satellites": total_visible,
+                "gps_visible": gps_visible,
+                "glonass_visible": glonass_visible,
+                "beidou_visible": beidou_visible,
+                "date": date,
+                "time": time_raw,
+            }
+
+        except Exception as e:
+            self._log(f"CGNSSINFO parse error: {e}")
+            return None
+
     def get_gps_location(self, timeout_ms: int = 30000) -> dict | None:
         """Get GPS location, waiting for fix.
 
@@ -1162,12 +1248,12 @@ class SIM7600Manager:
         }
 
     def get_gps_location(self) -> dict | None:
-        """Get GPS location with extended data (HDOP, VDOP, course).
+        """Get GPS location with extended data using AT+CGNSSINFO.
 
         Returns:
             Dict with GPS data or None
         """
-        return self.sim.get_gps_info_extended()
+        return self.sim.get_gps_cgnssinfo()
 
     def sync_time(self) -> bool:
         """Sync time from GPS.
