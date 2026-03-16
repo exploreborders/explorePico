@@ -547,8 +547,8 @@ class SIM7600:
         if "+CSQ:" in response:
             try:
                 start = response.find("+CSQ:") + 6
-                end = response.find(",", start)
-                parts = response[start:end].split(",")
+                data = response[start:].strip()
+                parts = data.split(",")
                 rssi = int(parts[0].strip())
                 ber = int(parts[1].strip())
                 return (rssi, ber)
