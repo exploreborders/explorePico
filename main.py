@@ -177,13 +177,6 @@ log(f"Primary: {PRIMARY_CONNECTION}, Fallback: {FALLBACK_CONNECTION}")
 if not try_primary_connection():
     log("All connections failed!")
 
-    if FALLBACK_CONNECTION == "LTE" and PRIMARY_CONNECTION != "LTE":
-        if connect_lte():
-            CONNECTION_TYPE = "LTE"
-    elif FALLBACK_CONNECTION == "WIFI" and PRIMARY_CONNECTION != "WIFI":
-        if connect_wifi():
-            CONNECTION_TYPE = "WiFi"
-
 if CONNECTION_TYPE:
     log(f"Connected via: {CONNECTION_TYPE}")
 

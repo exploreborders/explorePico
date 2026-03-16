@@ -888,9 +888,16 @@ def main() -> None:
     reconnect_count = 0
 
     while True:
-        if not ensure_wifi():
-            time.sleep(RECONNECT_DELAY_S)
-            continue
+        # Only check WiFi if LTE is not connected/available
+        # This prevents unnecessary WiFi checks when using LTE
+        if LTE_AVAILABLE and is_lte_connected():
+            # LTE is connected, proceed with MQTT loop
+            pass
+        else:
+            # LTE not available or not connected, ensure WiFi
+            if not ensure_wifi():
+                time.sleep(RECONNECT_DELAY_S)
+                continue
 
         if mqtt_client is None:
             if not connect_mqtt():

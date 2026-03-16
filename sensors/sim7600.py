@@ -351,7 +351,7 @@ class SIM7600:
                     if comma_pos != -1:
                         stat_str = response[comma_pos + 1 : comma_pos + 3].strip()
                         stat = int(stat_str)
-            except:
+            except (ValueError, IndexError):
                 pass
 
         return (0, stat)
@@ -371,7 +371,7 @@ class SIM7600:
                     if comma_pos != -1:
                         stat_str = response[comma_pos + 1 : comma_pos + 3].strip()
                         return int(stat_str)
-            except:
+            except (ValueError, IndexError):
                 pass
         return 0
 
@@ -552,7 +552,7 @@ class SIM7600:
                 rssi = int(parts[0].strip())
                 ber = int(parts[1].strip())
                 return (rssi, ber)
-            except:
+            except (ValueError, IndexError):
                 pass
 
         return (99, 99)
@@ -561,11 +561,11 @@ class SIM7600:
         """Get RSSI in dBm.
 
         Returns:
-            RSSI in dBm (-113 to -51 dBm), or 0 if not detectable
+            RSSI in dBm (-113 to -51 dBm), or -999 if not detectable
         """
         rssi, _ = self.get_signal_quality()
         if rssi == 99:
-            return 0
+            return -999  # Sentinel value for "not detectable"
         return -113 + (rssi * 2)
 
     def get_signal_quality_text(self) -> str:
@@ -604,7 +604,7 @@ class SIM7600:
                 end = response.find('"', start)
                 if start > 0 and end > start:
                     return response[start:end]
-            except:
+            except (ValueError, IndexError):
                 pass
 
         return ""
@@ -631,7 +631,7 @@ class SIM7600:
                     elif "GSM" in system:
                         return "GSM"
                     return system
-            except:
+            except (ValueError, IndexError):
                 pass
 
         return "UNKNOWN"
@@ -985,7 +985,7 @@ class SIM7600:
                 lat = -lat
 
             return round(lat, 6)
-        except:
+        except (ValueError, IndexError, TypeError):
             return 0.0
 
     def _convert_nmea_lon(self, raw: str, direction: str) -> float:
@@ -1010,7 +1010,7 @@ class SIM7600:
                 lon = -lon
 
             return round(lon, 6)
-        except:
+        except (ValueError, IndexError, TypeError):
             return 0.0
 
     # -------------------------------------------------------------------------
@@ -1056,7 +1056,7 @@ class SIM7600:
                 year = int(date_str[4:6]) + 2000
 
                 return f"{year:04d}-{month:02d}-{day:02d}T{hour:02d}:{minute:02d}:{second:02d}"
-            except:
+            except (ValueError, IndexError, TypeError):
                 pass
 
         return None

@@ -218,27 +218,37 @@ def create_backup() -> bool:
 def _remove_backup_folder() -> None:
     """Helper to remove backup folder and all contents."""
     try:
-        # List contents
-        files = uos.listdir(BACKUP_FOLDER)
-        for f in files:
-            path = f"{BACKUP_FOLDER}/{f}"
+        # Recursively remove all files and subdirectories
+        def remove_recursive(path: str) -> None:
             try:
                 stat = uos.stat(path)
                 if stat[0] & 0x4000:  # Is directory
-                    # Remove all files in subdirectory
+                    # Remove all contents first
                     try:
-                        subfiles = uos.listdir(path)
-                        for sf in subfiles:
-                            uos.remove(f"{path}/{sf}")
+                        for entry in uos.listdir(path):
+                            remove_recursive(f"{path}/{entry}")
                     except Exception:
                         pass
-                    uos.rmdir(path)
+                    # Remove the now-empty directory
+                    try:
+                        uos.rmdir(path)
+                    except Exception:
+                        pass
                 else:
+                    # It's a file, remove it
                     uos.remove(path)
             except Exception:
                 pass
-        # Remove the backup folder itself
-        uos.rmdir(BACKUP_FOLDER)
+
+        # Start recursive removal from backup folder
+        remove_recursive(BACKUP_FOLDER)
+
+        # Try to remove the backup folder itself
+        try:
+            uos.rmdir(BACKUP_FOLDER)
+        except Exception:
+            pass  # Folder may already be removed
+
     except Exception:
         pass  # Folder doesn't exist, that's fine
 
