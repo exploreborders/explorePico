@@ -59,7 +59,6 @@ def get_latest_release_tag(owner: str, repo: str) -> str | None:
         if response.status_code == 200:
             data = ujson.loads(response.text)
             tag = data.get("tag_name", "").lstrip("v")
-            log(f"Latest release: {tag}")
             return tag
         elif response.status_code == 403:
             log("GitHub API rate limited")
@@ -299,22 +298,17 @@ def check_and_update(owner: str, repo: str, progress_callback=None) -> bool:
     log("Checking GitHub for updates...")
     blink_pattern("11")
 
-    release = get_latest_release(owner, repo)
-    if not release:
+    # First, just get the version tag (lightweight)
+    new_version = get_latest_release_tag(owner, repo)
+    if not new_version:
         log("No release found or API error")
         if progress_callback:
             progress_callback(0, "error")
         return False
 
-    new_version = release.get("tag", "")
-    if not new_version:
-        log("No version in release")
-        if progress_callback:
-            progress_callback(0, "error")
-        return False
+    log(f"Latest release: {new_version}")
 
     current = read_version() or "0.0"
-
     log(f"Current: {current}, Latest: {new_version}")
 
     result = compare_versions(current, new_version)
@@ -325,7 +319,15 @@ def check_and_update(owner: str, repo: str, progress_callback=None) -> bool:
             progress_callback(100, "up to date")
         return False
 
+    # Update available - now fetch the file list
     log(f"Update available: {new_version}")
+
+    release = get_latest_release(owner, repo)
+    if not release:
+        log("Failed to get release info")
+        if progress_callback:
+            progress_callback(0, "error")
+        return False
 
     if download_and_update(owner, repo, release, progress_callback):
         return True

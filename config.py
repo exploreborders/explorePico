@@ -141,10 +141,10 @@ LTE_CONNECT_TIMEOUT_MS = 90000
 
 # GPS Configuration
 ENABLE_GPS = True
-GPS_UPDATE_INTERVAL_MS = 30000
+GPS_UPDATE_INTERVAL_MS = 1000  # 1 second
 
 # Signal & Network Update Intervals
-SIGNAL_UPDATE_INTERVAL_MS = 60000
+SIGNAL_UPDATE_INTERVAL_MS = 10000  # 10 seconds
 NETWORK_INFO_UPDATE_INTERVAL_MS = 300000
 
 # Connection Priority (try first, fallback second)
@@ -180,8 +180,8 @@ TOPIC_GPS_SPEED = "homeassistant/pico/sensor/gps_speed"
 TOPIC_GPS_SPEED_CONFIG = "homeassistant/pico/sensor/gps_speed/config"
 TOPIC_GPS_SATELLITES = "homeassistant/pico/sensor/gps_satellites"
 TOPIC_GPS_SATELLITES_CONFIG = "homeassistant/pico/sensor/gps_satellites/config"
-TOPIC_GPS_HDOP = "homeassistant/pico/sensor/gps_hdop"
-TOPIC_GPS_VDOP = "homeassistant/pico/sensor/gps_vdop"
+TOPIC_GPS_HDOP = "homeassistant/pico/sensor/gps_hdop_accuracy"
+TOPIC_GPS_VDOP = "homeassistant/pico/sensor/gps_vdop_accuracy"
 TOPIC_GPS_COURSE = "homeassistant/pico/sensor/gps_course"
 
 TOPIC_GPS_INTERVAL_SET = "homeassistant/pico/gps/set_interval"

@@ -91,7 +91,6 @@ def connect_lte() -> bool:
             rx_pin=LTE_RX_PIN,
             baudrate=LTE_BAUD,
         ):
-            log("LTE", "LTE connected successfully!")
             lte_connected = True
             return True
     except Exception as e:
@@ -180,7 +179,6 @@ if CONNECTION_TYPE:
         try:
             from github_updater import check_and_update
 
-            log("Checking GitHub for updates...")
             update_check_executed = True
             github_updated = check_and_update(GITHUB_OWNER, GITHUB_REPO)
 

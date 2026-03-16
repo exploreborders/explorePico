@@ -115,14 +115,11 @@ def connect_lte(
         _log("LTE", "SIM7600 init failed")
         return False
 
-    _log("LTE", "SIM7600 initialized")
-
     if sync_time:
-        _log("LTE", "Syncing time from GPS...")
         sim.enable_gps()
 
         if sim.sync_time_from_gps(timeout_ms=60000):
-            _log("LTE", "Time synced from GPS")
+            pass
         else:
             _log("LTE", "GPS time sync failed, skipping time sync")
 
@@ -131,8 +128,6 @@ def connect_lte(
     if not sim.connect_lte(apn, pin, timeout_ms):
         _log("LTE", "LTE connection failed")
         return False
-
-    _log("LTE", "LTE connected successfully")
 
     _lte_manager = SIM7600Manager(sim, apn, pin)
     _lte_manager.set_logger(_log)

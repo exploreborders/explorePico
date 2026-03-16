@@ -11,9 +11,14 @@
 #   - GPS Altitude
 #   - GPS Speed
 #   - GPS Satellites
-#   - GPS HDOP (Horizontal Dilution of Precision)
-#   - GPS VDOP (Vertical Dilution of Precision)
+#   - GPS HDOP Accuracy (meters)
+#   - GPS VDOP Accuracy (meters)
 #   - GPS Course (Direction of movement)
+#   - CPU Temperature
+#   - Room Temperature
+#   - Water Temperature
+#   - Current 1-5
+#   - LED Switch
 #
 # Installation:
 #   1. Copy this file to your Home Assistant config/packages/ directory
@@ -82,6 +87,126 @@ mqtt:
     - name: "Pico Network Type"
       unique_id: "pico_network_type"
       state_topic: "homeassistant/pico/sensor/network_type"
+      availability:
+        topic: "homeassistant/pico/availability"
+        payload_available: "online"
+        payload_not_available: "offline"
+      device:
+        identifiers:
+          - pico2w
+        name: "Raspberry Pi Pico 2W"
+
+    # CPU Temperature
+    - name: "Pico CPU Temperature"
+      unique_id: "pico_cpu_temp"
+      state_topic: "homeassistant/pico/sensor/cpu_temp"
+      unit_of_measurement: "°C"
+      device_class: "temperature"
+      availability:
+        topic: "homeassistant/pico/availability"
+        payload_available: "online"
+        payload_not_available: "offline"
+      device:
+        identifiers:
+          - pico2w
+        name: "Raspberry Pi Pico 2W"
+
+    # Room Temperature
+    - name: "Pico Room Temperature"
+      unique_id: "pico_room_temp"
+      state_topic: "homeassistant/pico/sensor/room_temp"
+      unit_of_measurement: "°C"
+      device_class: "temperature"
+      availability:
+        topic: "homeassistant/pico/availability"
+        payload_available: "online"
+        payload_not_available: "offline"
+      device:
+        identifiers:
+          - pico2w
+        name: "Raspberry Pi Pico 2W"
+
+    # Water Temperature
+    - name: "Pico Water Temperature"
+      unique_id: "pico_water_temp"
+      state_topic: "homeassistant/pico/sensor/water_temp"
+      unit_of_measurement: "°C"
+      device_class: "temperature"
+      availability:
+        topic: "homeassistant/pico/availability"
+        payload_available: "online"
+        payload_not_available: "offline"
+      device:
+        identifiers:
+          - pico2w
+        name: "Raspberry Pi Pico 2W"
+
+    # Current 1
+    - name: "Pico Current 1"
+      unique_id: "pico_current_1"
+      state_topic: "homeassistant/pico/sensor/current_1"
+      unit_of_measurement: "A"
+      device_class: "current"
+      availability:
+        topic: "homeassistant/pico/availability"
+        payload_available: "online"
+        payload_not_available: "offline"
+      device:
+        identifiers:
+          - pico2w
+        name: "Raspberry Pi Pico 2W"
+
+    # Current 2
+    - name: "Pico Current 2"
+      unique_id: "pico_current_2"
+      state_topic: "homeassistant/pico/sensor/current_2"
+      unit_of_measurement: "A"
+      device_class: "current"
+      availability:
+        topic: "homeassistant/pico/availability"
+        payload_available: "online"
+        payload_not_available: "offline"
+      device:
+        identifiers:
+          - pico2w
+        name: "Raspberry Pi Pico 2W"
+
+    # Current 3
+    - name: "Pico Current 3"
+      unique_id: "pico_current_3"
+      state_topic: "homeassistant/pico/sensor/current_3"
+      unit_of_measurement: "A"
+      device_class: "current"
+      availability:
+        topic: "homeassistant/pico/availability"
+        payload_available: "online"
+        payload_not_available: "offline"
+      device:
+        identifiers:
+          - pico2w
+        name: "Raspberry Pi Pico 2W"
+
+    # Current 4
+    - name: "Pico Current 4"
+      unique_id: "pico_current_4"
+      state_topic: "homeassistant/pico/sensor/current_4"
+      unit_of_measurement: "A"
+      device_class: "current"
+      availability:
+        topic: "homeassistant/pico/availability"
+        payload_available: "online"
+        payload_not_available: "offline"
+      device:
+        identifiers:
+          - pico2w
+        name: "Raspberry Pi Pico 2W"
+
+    # Current 5
+    - name: "Pico Current 5"
+      unique_id: "pico_current_5"
+      state_topic: "homeassistant/pico/sensor/current_5"
+      unit_of_measurement: "A"
+      device_class: "current"
       availability:
         topic: "homeassistant/pico/availability"
         payload_available: "online"
@@ -161,10 +286,11 @@ mqtt:
           - pico2w
         name: "Raspberry Pi Pico 2W"
 
-    # GPS HDOP (Horizontal Dilution of Precision)
-    - name: "Pico GPS HDOP"
-      unique_id: "pico_gps_hdop"
-      state_topic: "homeassistant/pico/sensor/gps_hdop"
+    # GPS HDOP Accuracy (meters)
+    - name: "Pico GPS HDOP Accuracy"
+      unique_id: "pico_gps_hdop_accuracy"
+      state_topic: "homeassistant/pico/sensor/gps_hdop_accuracy"
+      unit_of_measurement: "m"
       availability:
         topic: "homeassistant/pico/availability"
         payload_available: "online"
@@ -174,10 +300,11 @@ mqtt:
           - pico2w
         name: "Raspberry Pi Pico 2W"
 
-    # GPS VDOP (Vertical Dilution of Precision)
-    - name: "Pico GPS VDOP"
-      unique_id: "pico_gps_vdop"
-      state_topic: "homeassistant/pico/sensor/gps_vdop"
+    # GPS VDOP Accuracy (meters)
+    - name: "Pico GPS VDOP Accuracy"
+      unique_id: "pico_gps_vdop_accuracy"
+      state_topic: "homeassistant/pico/sensor/gps_vdop_accuracy"
+      unit_of_measurement: "m"
       availability:
         topic: "homeassistant/pico/availability"
         payload_available: "online"
@@ -192,6 +319,40 @@ mqtt:
       unique_id: "pico_gps_course"
       state_topic: "homeassistant/pico/sensor/gps_course"
       unit_of_measurement: "°"
+      availability:
+        topic: "homeassistant/pico/availability"
+        payload_available: "online"
+        payload_not_available: "offline"
+      device:
+        identifiers:
+          - pico2w
+        name: "Raspberry Pi Pico 2W"
+
+  switch:
+    # LED Switch
+    - name: "Pico LED"
+      unique_id: "pico_led"
+      command_topic: "homeassistant/pico/switch/led/set"
+      state_topic: "homeassistant/pico/switch/led/state"
+      payload_on: "ON"
+      payload_off: "OFF"
+      availability:
+        topic: "homeassistant/pico/availability"
+        payload_available: "online"
+        payload_not_available: "offline"
+      device:
+        identifiers:
+          - pico2w
+        name: "Raspberry Pi Pico 2W"
+
+  update:
+    # Firmware Update Entity
+    - name: "Pico Firmware"
+      unique_id: "pico_firmware_update"
+      state_topic: "homeassistant/pico/update/state"
+      command_topic: "homeassistant/pico/update/cmd"
+      payload_install: "PRESS"
+      device_class: "firmware"
       availability:
         topic: "homeassistant/pico/availability"
         payload_available: "online"

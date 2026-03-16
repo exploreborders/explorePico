@@ -96,7 +96,6 @@ from config import (
     SENSOR_RETRY_INTERVAL_MS,
     MQTT_DELAY_DISCOVERY,
     MQTT_DELAY_CONNECT,
-    MQTT_DELAY_SUBSCRIBE,
     MQTT_DELAY_INITIAL_STATE,
     MQTT_LOOP_DELAY,
     ERROR_DELAY_SHORT,
@@ -703,10 +702,8 @@ def connect_mqtt() -> bool:
         mqtt_client.subscribe(TOPIC_GPS_INTERVAL_SET)
         log("MQTT", "Subscribed!")
 
-        time.sleep(MQTT_DELAY_SUBSCRIBE)
-        publish_discovery()
-        time.sleep(2)  # Extra delay for SSL stability after discovery
-        log("MQTT", "Discovery published!")
+        # Skip auto-discovery - all sensors defined in yaml file
+        # This reduces MQTT traffic over LTE/SSL connection
 
         time.sleep(MQTT_DELAY_INITIAL_STATE)
         publish_led_state()
@@ -829,8 +826,11 @@ def handle_gps_publish() -> None:
             mqtt_publish(TOPIC_GPS_ALTITUDE, str(gps.get("altitude", 0)))
             mqtt_publish(TOPIC_GPS_SPEED, str(gps.get("speed", 0)))
             mqtt_publish(TOPIC_GPS_SATELLITES, str(gps.get("satellites", 0)))
-            mqtt_publish(TOPIC_GPS_HDOP, str(gps.get("hdop", 0)))
-            mqtt_publish(TOPIC_GPS_VDOP, str(gps.get("vdop", 0)))
+            # Convert DOP to accuracy in meters (DOP × 5m UERE)
+            hdop = gps.get("hdop", 0)
+            vdop = gps.get("vdop", 0)
+            mqtt_publish(TOPIC_GPS_HDOP, str(round(hdop * 5, 1)))
+            mqtt_publish(TOPIC_GPS_VDOP, str(round(vdop * 5, 1)))
             mqtt_publish(TOPIC_GPS_COURSE, str(gps.get("course", 0)))
         last_gps_publish = now
 
