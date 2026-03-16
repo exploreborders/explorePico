@@ -665,6 +665,132 @@ class SIM7600:
             return True
         return False
 
+    def get_gps_gga(self) -> dict | None:
+        """Get GPS GGA data (includes HDOP, VDOP, satellites).
+
+        Returns:
+            Dict with hdop, vdop, satellites or None
+        """
+        response = self.send_at("AT+CGPSINFO=1", timeout=3000)
+
+        if "+CGPSINFO:" not in response or response == "ERROR":
+            return None
+
+        try:
+            start = response.find("+CGPSINFO:") + 11
+            data = response[start:].strip()
+
+            if not data or data == ",":
+                return None
+
+            parts = data.split(",")
+
+            if len(parts) < 10:
+                return None
+
+            hdop = float(parts[8].strip()) if parts[8].strip() else 0.0
+            vdop = float(parts[9].strip()) if parts[9].strip() else 0.0
+
+            return {
+                "hdop": hdop,
+                "vdop": vdop,
+            }
+
+        except Exception as e:
+            self._log(f"GGA parse error: {e}")
+            return None
+
+    def get_gps_vtg(self) -> dict | None:
+        """Get GPS VTG data (includes course/heading).
+
+        Returns:
+            Dict with course (true north) or None
+        """
+        response = self.send_at("AT+CGPSINFO=1", timeout=3000)
+
+        if "+CGPSINFO:" not in response or response == "ERROR":
+            return None
+
+        try:
+            start = response.find("+CGPSINFO:") + 11
+            data = response[start:].strip()
+
+            if not data or data == ",":
+                return None
+
+            parts = data.split(",")
+
+            if len(parts) < 10:
+                return None
+
+            course = float(parts[8].strip()) if parts[8].strip() else 0.0
+
+            return {
+                "course": course,
+            }
+
+        except Exception as e:
+            self._log(f"VTG parse error: {e}")
+            return None
+
+    def get_gps_info_extended(self) -> dict | None:
+        """Get extended GPS information including HDOP, VDOP, course.
+
+        Returns:
+            Dict with lat, lon, alt, speed, satellites, hdop, vdop, course
+        """
+        response = self.send_at("AT+CGPSINFO=1", timeout=3000)
+
+        if "+CGPSINFO:" not in response or response == "ERROR":
+            return None
+
+        try:
+            start = response.find("+CGPSINFO:") + 11
+            data = response[start:].strip()
+
+            if not data or data == ",":
+                return None
+
+            parts = data.split(",")
+
+            if len(parts) < 10:
+                return None
+
+            lat_raw = parts[0].strip()
+            lat_dir = parts[1].strip()
+            lon_raw = parts[2].strip()
+            lon_dir = parts[3].strip()
+            date = parts[4].strip()
+            time_raw = parts[5].strip()
+            alt = float(parts[6].strip()) if parts[6].strip() else 0.0
+            speed = float(parts[7].strip()) if parts[7].strip() else 0.0
+            course = float(parts[8].strip()) if parts[8].strip() else 0.0
+            hdop = (
+                float(parts[9].strip()) if len(parts) > 9 and parts[9].strip() else 0.0
+            )
+
+            if not lat_raw or not lon_raw:
+                return None
+
+            lat = self._convert_nmea_lat(lat_raw, lat_dir)
+            lon = self._convert_nmea_lon(lon_raw, lon_dir)
+
+            return {
+                "latitude": lat,
+                "longitude": lon,
+                "altitude": alt,
+                "speed": speed,
+                "course": course,
+                "hdop": hdop,
+                "date": date,
+                "time": time_raw,
+                "satellites": 0,
+            }
+
+        except Exception as e:
+            self._log(f"GPS extended parse error: {e}")
+            return None
+
     def get_gps_info(self) -> dict | None:
         """Get GPS information.
 
@@ -1036,12 +1162,12 @@ class SIM7600Manager:
         }
 
     def get_gps_location(self) -> dict | None:
-        """Get GPS location.
+        """Get GPS location with extended data (HDOP, VDOP, course).
 
         Returns:
             Dict with GPS data or None
         """
-        return self.sim.get_gps_location()
+        return self.sim.get_gps_info_extended()
 
     def sync_time(self) -> bool:
         """Sync time from GPS.

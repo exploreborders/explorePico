@@ -180,6 +180,9 @@ TOPIC_GPS_SPEED = "homeassistant/pico/sensor/gps_speed"
 TOPIC_GPS_SPEED_CONFIG = "homeassistant/pico/sensor/gps_speed/config"
 TOPIC_GPS_SATELLITES = "homeassistant/pico/sensor/gps_satellites"
 TOPIC_GPS_SATELLITES_CONFIG = "homeassistant/pico/sensor/gps_satellites/config"
+TOPIC_GPS_HDOP = "homeassistant/pico/sensor/gps_hdop"
+TOPIC_GPS_VDOP = "homeassistant/pico/sensor/gps_vdop"
+TOPIC_GPS_COURSE = "homeassistant/pico/sensor/gps_course"
 
 TOPIC_GPS_INTERVAL_SET = "homeassistant/pico/gps/set_interval"
 

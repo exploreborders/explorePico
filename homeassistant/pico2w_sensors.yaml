@@ -8,6 +8,12 @@
 #   - Network Type
 #   - GPS Latitude
 #   - GPS Longitude
+#   - GPS Altitude
+#   - GPS Speed
+#   - GPS Satellites
+#   - GPS HDOP (Horizontal Dilution of Precision)
+#   - GPS VDOP (Vertical Dilution of Precision)
+#   - GPS Course (Direction of movement)
 #
 # Installation:
 #   1. Copy this file to your Home Assistant config/packages/ directory
@@ -103,6 +109,88 @@ mqtt:
     - name: "Pico GPS Longitude"
       unique_id: "pico_gps_longitude"
       state_topic: "homeassistant/pico/sensor/gps_longitude"
+      unit_of_measurement: "°"
+      availability:
+        topic: "homeassistant/pico/availability"
+        payload_available: "online"
+        payload_not_available: "offline"
+      device:
+        identifiers:
+          - pico2w
+        name: "Raspberry Pi Pico 2W"
+
+    # GPS Altitude
+    - name: "Pico GPS Altitude"
+      unique_id: "pico_gps_altitude"
+      state_topic: "homeassistant/pico/sensor/gps_altitude"
+      unit_of_measurement: "m"
+      availability:
+        topic: "homeassistant/pico/availability"
+        payload_available: "online"
+        payload_not_available: "offline"
+      device:
+        identifiers:
+          - pico2w
+        name: "Raspberry Pi Pico 2W"
+
+    # GPS Speed
+    - name: "Pico GPS Speed"
+      unique_id: "pico_gps_speed"
+      state_topic: "homeassistant/pico/sensor/gps_speed"
+      unit_of_measurement: "km/h"
+      device_class: "speed"
+      availability:
+        topic: "homeassistant/pico/availability"
+        payload_available: "online"
+        payload_not_available: "offline"
+      device:
+        identifiers:
+          - pico2w
+        name: "Raspberry Pi Pico 2W"
+
+    # GPS Satellites
+    - name: "Pico GPS Satellites"
+      unique_id: "pico_gps_satellites"
+      state_topic: "homeassistant/pico/sensor/gps_satellites"
+      availability:
+        topic: "homeassistant/pico/availability"
+        payload_available: "online"
+        payload_not_available: "offline"
+      device:
+        identifiers:
+          - pico2w
+        name: "Raspberry Pi Pico 2W"
+
+    # GPS HDOP (Horizontal Dilution of Precision)
+    - name: "Pico GPS HDOP"
+      unique_id: "pico_gps_hdop"
+      state_topic: "homeassistant/pico/sensor/gps_hdop"
+      availability:
+        topic: "homeassistant/pico/availability"
+        payload_available: "online"
+        payload_not_available: "offline"
+      device:
+        identifiers:
+          - pico2w
+        name: "Raspberry Pi Pico 2W"
+
+    # GPS VDOP (Vertical Dilution of Precision)
+    - name: "Pico GPS VDOP"
+      unique_id: "pico_gps_vdop"
+      state_topic: "homeassistant/pico/sensor/gps_vdop"
+      availability:
+        topic: "homeassistant/pico/availability"
+        payload_available: "online"
+        payload_not_available: "offline"
+      device:
+        identifiers:
+          - pico2w
+        name: "Raspberry Pi Pico 2W"
+
+    # GPS Course (Direction of movement)
+    - name: "Pico GPS Course"
+      unique_id: "pico_gps_course"
+      state_topic: "homeassistant/pico/sensor/gps_course"
       unit_of_measurement: "°"
       availability:
         topic: "homeassistant/pico/availability"
