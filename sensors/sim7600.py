@@ -100,114 +100,79 @@ class SIM7600:
         except Exception:
             return ""
 
-    def _try_baud(self, baud: int) -> bool:
-        """Try a specific baud rate with better response handling."""
-        try:
-            if self.uart:
-                self.uart.deinit()
-                time.sleep(0.3)
-
-            self.uart = UART(
-                self.uart_id,
-                baud,
-                tx=Pin(self.tx_pin),
-                rx=Pin(self.rx_pin),
-            )
-            self.uart.init(baud, bits=8, parity=None, stop=1)
-            time.sleep(1)
-
-            self._log(f"Testing {baud} baud...")
-
-            for attempt in range(5):
-                # Clear any stale data
-                while self.uart.any():
-                    self.uart.read(100)
-                time.sleep(0.5)
-
-                # Send AT command
-                self.uart.write(b"AT\r\n")
-
-                # Wait and collect response
-                response = ""
-                for _ in range(20):  # More iterations
-                    if self.uart.any():
-                        data = self.uart.read(128)  # Larger buffer
-                        if data:
-                            decoded = data.decode("utf-8", "ignore")
-                            response += decoded
-
-                    if "OK" in response:
-                        self.baudrate = baud
-                        self._log(f"SUCCESS at {baud} baud!")
-                        return True
-
-                    if "ERROR" in response:
-                        break
-
-                    time.sleep(0.5)  # Wait longer between reads
-
-                # Log what we got
-                if response:
-                    self._log(f"Final response at {baud}: {response[:80]}")
-                else:
-                    self._log(f"No response at {baud}")
-
-            return False
-
-        except Exception as e:
-            self._log(f"Baud {baud} error: {e}")
-            return False
-
     def init(self) -> bool:
         """Initialize UART communication with SIM7600.
 
         Returns:
             True if SIM7600 responds to AT command
         """
-        # If baud rate was manually set, try only that one
-        if self.baudrate and self.baudrate > 0:
-            baud_rates = [self.baudrate]
-            self._log(f"Using manually set baud rate: {self.baudrate}")
-        else:
-            baud_rates = [115200, 57600, 38400, 19200, 9600, 230400, 460800, 4800, 2400]
-            self._log("Starting auto-baud detection...")
-
         self._log("Waiting 15s for module to fully boot...")
         time.sleep(15)
 
-        for baud in baud_rates:
-            self._log(f"Trying baud rate: {baud}")
-            if self._try_baud(baud):
-                self._log(f"Connected at {baud} baud!")
+        # Initialize UART at fixed 115200
+        self.baudrate = 115200
+        self._log(f"Connecting at {self.baudrate} baud...")
 
-                self._log("Getting module info...")
-                for _ in range(2):
-                    resp = self._send_at_simple("ATI", timeout=3000)
-                    if resp:
-                        self._log(f"Module: {resp[:100]}")
-                        break
+        try:
+            self.uart = UART(
+                self.uart_id,
+                self.baudrate,
+                tx=Pin(self.tx_pin),
+                rx=Pin(self.rx_pin),
+            )
+            self.uart.init(self.baudrate, bits=8, parity=None, stop=1)
+        except Exception:
+            self._log("Failed to initialize UART")
+            return False
 
-                self._log("Disabling echo...")
-                for _ in range(3):
-                    resp = self._send_at_simple("ATE0", timeout=2000)
-                    if resp and "OK" in resp:
-                        self._log("Echo disabled!")
-                        break
-                    time.sleep(0.5)
+        time.sleep(1)
 
-                self._log("Setting full functionality...")
-                for _ in range(3):
-                    resp = self._send_at_simple("AT+CFUN=1", timeout=3000)
-                    if resp and "OK" in resp:
-                        self._log("Full functionality set!")
-                        break
-                    time.sleep(1)
+        # Test connection - verify SIM7600 responds
+        connected = False
+        for attempt in range(5):
+            while self.uart.any():
+                self.uart.read(100)
+            time.sleep(0.5)
+            self.uart.write(b"AT\r\n")
 
-                self._log("SIM7600 initialized successfully!")
-                return True
+            response = ""
+            for _ in range(20):
+                if self.uart.any():
+                    data = self.uart.read(128)
+                    if data:
+                        response += data.decode("utf-8", "ignore")
+                if "OK" in response:
+                    connected = True
+                    break
+                if "ERROR" in response:
+                    break
+                time.sleep(0.5)
 
-        self._log("No working baud rate found")
-        return False
+            if connected:
+                break
+
+        if not connected:
+            self._log("Failed to connect at 115200 baud")
+            return False
+
+        self._log("Disabling echo...")
+        for _ in range(3):
+            resp = self._send_at_simple("ATE0", timeout=2000)
+            if resp and "OK" in resp:
+                self._log("Echo disabled!")
+                break
+            time.sleep(0.5)
+
+        self._log("Setting full functionality...")
+        for _ in range(3):
+            resp = self._send_at_simple("AT+CFUN=1", timeout=3000)
+            if resp and "OK" in resp:
+                self._log("Full functionality set!")
+                break
+            time.sleep(1)
+
+        self._log("SIM7600 initialized successfully!")
+        return True
 
     def send_at(
         self,
