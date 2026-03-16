@@ -704,7 +704,6 @@ def connect_mqtt() -> bool:
 
         # Skip auto-discovery - all sensors defined in yaml file
         # This reduces MQTT traffic over LTE/SSL connection
-
         time.sleep(MQTT_DELAY_INITIAL_STATE)
         publish_led_state()
         time.sleep(0.5)
