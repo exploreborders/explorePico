@@ -848,14 +848,14 @@ class SIM7600:
             return None
 
     def get_gps_cgnssinfo(self) -> dict | None:
-        """Get extended GPS info using AT+CGNSSINFO command.
+        """Get extended GPS info using AT+CGNSSINFO=1 command.
 
         Returns extended GPS data including visible satellites, HDOP, VDOP.
 
         Returns:
             Dict with satellites, hdop, vdop or None
         """
-        response = self.send_at("AT+CGNSSINFO", timeout=3000)
+        response = self.send_at("AT+CGNSSINFO=1", timeout=3000)
 
         if "+CGNSSINFO:" not in response or response == "ERROR":
             return None
