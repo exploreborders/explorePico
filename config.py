@@ -272,6 +272,35 @@ def validate_config() -> bool:
     ):
         errors.append("UPDATE_BUTTON_PIN must be 0-22 or 26-28")
 
+    # Internal temp ADC pin (RP2350 ADC0-ADC4)
+    if (
+        not isinstance(INTERNAL_TEMP_ADC_PIN, int)
+        or INTERNAL_TEMP_ADC_PIN < 0
+        or INTERNAL_TEMP_ADC_PIN > 4
+    ):
+        errors.append("INTERNAL_TEMP_ADC_PIN must be 0-4 (RP2350 ADC pins)")
+
+    # LTE UART ID
+    if not isinstance(LTE_UART_ID, int) or LTE_UART_ID < 0 or LTE_UART_ID > 1:
+        errors.append("LTE_UART_ID must be 0 or 1")
+
+    # LTE UART pins
+    if (
+        not isinstance(LTE_TX_PIN, int)
+        or LTE_TX_PIN < 0
+        or LTE_TX_PIN > 28
+        or LTE_TX_PIN in (23, 24, 25, 29)
+    ):
+        errors.append("LTE_TX_PIN must be 0-22 or 26-28 (23-25, 29 reserved)")
+
+    if (
+        not isinstance(LTE_RX_PIN, int)
+        or LTE_RX_PIN < 0
+        or LTE_RX_PIN > 28
+        or LTE_RX_PIN in (23, 24, 25, 29)
+    ):
+        errors.append("LTE_RX_PIN must be 0-22 or 26-28 (23-25, 29 reserved)")
+
     if errors:
         raise ValueError(
             "Config validation failed:\n" + "\n".join(f"  - {e}" for e in errors)

@@ -19,9 +19,6 @@ Usage:
         print("LTE connected!")
 """
 
-import time
-import machine
-
 from sensors.sim7600 import SIM7600, SIM7600Manager
 
 
@@ -124,11 +121,10 @@ def connect_lte(
         _log("LTE", "Syncing time from GPS...")
         sim.enable_gps()
 
-        if sim.sync_time_from_gps(timeout_ms=30000):
+        if sim.sync_time_from_gps(timeout_ms=60000):
             _log("LTE", "Time synced from GPS")
         else:
-            _log("LTE", "GPS time sync failed, trying network time...")
-            sim.sync_time_from_network()
+            _log("LTE", "GPS time sync failed, skipping time sync")
 
     _log("LTE", f"Connecting to LTE (APN: {apn})...")
 

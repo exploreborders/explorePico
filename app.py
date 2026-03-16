@@ -785,7 +785,11 @@ def handle_lte_signal_publish() -> None:
     now = time.ticks_ms()
     if time.ticks_diff(now, last_signal_publish) >= SIGNAL_UPDATE_INTERVAL_MS:
         signal = get_signal_info()
-        mqtt_publish(TOPIC_SIGNAL_RSSI, str(signal.get("rssi", 0)))
+        rssi = signal.get("rssi", 0)
+        if rssi == -999:
+            mqtt_publish(TOPIC_SIGNAL_RSSI, "unavailable")
+        else:
+            mqtt_publish(TOPIC_SIGNAL_RSSI, str(rssi))
         mqtt_publish(TOPIC_SIGNAL_QUALITY, signal.get("quality", "unknown"))
         last_signal_publish = now
 
@@ -888,13 +892,12 @@ def main() -> None:
     reconnect_count = 0
 
     while True:
-        # Only check WiFi if LTE is not connected/available
-        # This prevents unnecessary WiFi checks when using LTE
+        # Check LTE first, only use WiFi as fallback
         if LTE_AVAILABLE and is_lte_connected():
-            # LTE is connected, proceed with MQTT loop
+            # LTE is connected, proceed with MQTT
             pass
         else:
-            # LTE not available or not connected, ensure WiFi
+            # LTE not connected, ensure WiFi
             if not ensure_wifi():
                 time.sleep(RECONNECT_DELAY_S)
                 continue

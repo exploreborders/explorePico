@@ -97,7 +97,7 @@ class SIM7600:
 
             return response.strip()
 
-        except Exception as e:
+        except Exception:
             return ""
 
     def _try_baud(self, baud: int) -> bool:
@@ -550,7 +550,9 @@ class SIM7600:
                 data = response[start:].strip()
                 parts = data.split(",")
                 rssi = int(parts[0].strip())
-                ber = int(parts[1].strip())
+                # Handle "99\n\nOK" case - extract just the number
+                ber_str = parts[1].strip().split("\n")[0].strip()
+                ber = int(ber_str) if ber_str.isdigit() else 99
                 return (rssi, ber)
             except (ValueError, IndexError):
                 pass
@@ -665,272 +667,117 @@ class SIM7600:
             return True
         return False
 
-    def get_gps_gga(self) -> dict | None:
-        """Get GPS GGA data (includes HDOP, VDOP, satellites).
+    def get_gps_info(self) -> dict | None:
+        """Get all GPS data using AT+CGNSSINFO=1.
 
         Returns:
-            Dict with hdop, vdop, satellites or None
+            Dict with latitude, longitude, altitude, speed, course,
+            satellites, hdop, vdop, date, time or None if no fix
         """
-        response = self.send_at("AT+CGPSINFO=1", timeout=3000)
+        response = self.send_at("AT+CGNSSINFO=1", timeout=3000)
 
-        if "+CGPSINFO:" not in response or response == "ERROR":
+        # Handle response format: +CGNSSINFO: GNSSINFO: x,... or +CGNSSINFO: x,...
+        if "+CGNSSINFO:" not in response:
+            return None
+
+        # Find the actual data start (after the last :)
+        data_start = response.rfind(":") + 1
+        data = response[data_start:].strip()
+
+        if not data:
             return None
 
         try:
-            start = response.find("+CGPSINFO:") + 11
-            data = response[start:].strip()
-
-            if not data or data == ",":
-                return None
-
             parts = data.split(",")
 
-            if len(parts) < 10:
+            if len(parts) < 13:
                 return None
 
-            hdop = float(parts[8].strip()) if parts[8].strip() else 0.0
-            vdop = float(parts[9].strip()) if parts[9].strip() else 0.0
+            lat_raw = parts[4].strip() if len(parts) > 4 and parts[4].strip() else ""
+            lat_dir = parts[5].strip() if len(parts) > 5 and parts[5].strip() else ""
+            lon_raw = parts[6].strip() if len(parts) > 6 and parts[6].strip() else ""
+            lon_dir = parts[7].strip() if len(parts) > 7 and parts[7].strip() else ""
+
+            if not lat_raw or not lon_raw:
+                return None
+
+            gps_visible = 0
+            if len(parts) > 1 and parts[1].strip():
+                try:
+                    gps_visible = int(parts[1].strip())
+                except ValueError:
+                    pass
+
+            glonass_visible = 0
+            if len(parts) > 2 and parts[2].strip():
+                try:
+                    glonass_visible = int(parts[2].strip())
+                except ValueError:
+                    pass
+
+            beidou_visible = 0
+            if len(parts) > 3 and parts[3].strip():
+                try:
+                    beidou_visible = int(parts[3].strip())
+                except ValueError:
+                    pass
+
+            lat = self._convert_nmea_lat(lat_raw, lat_dir)
+            lon = self._convert_nmea_lon(lon_raw, lon_dir)
+
+            alt = 0.0
+            if len(parts) > 10 and parts[10].strip():
+                try:
+                    alt = float(parts[10].strip())
+                except ValueError:
+                    pass
+
+            speed = 0.0
+            if len(parts) > 11 and parts[11].strip():
+                try:
+                    speed = float(parts[11].strip())
+                except ValueError:
+                    pass
+
+            course = 0.0
+            if len(parts) > 12 and parts[12].strip():
+                try:
+                    course = float(parts[12].strip())
+                except ValueError:
+                    pass
+
+            hdop = 0.0
+            if len(parts) > 13 and parts[13].strip():
+                try:
+                    hdop = float(parts[13].strip())
+                except ValueError:
+                    pass
+
+            vdop = 0.0
+            if len(parts) > 14 and parts[14].strip():
+                try:
+                    vdop = float(parts[14].strip())
+                except ValueError:
+                    pass
 
             return {
+                "latitude": lat,
+                "longitude": lon,
+                "altitude": alt,
+                "speed": speed,
+                "course": course,
                 "hdop": hdop,
                 "vdop": vdop,
-            }
-
-        except Exception as e:
-            self._log(f"GGA parse error: {e}")
-            return None
-
-    def get_gps_vtg(self) -> dict | None:
-        """Get GPS VTG data (includes course/heading).
-
-        Returns:
-            Dict with course (true north) or None
-        """
-        response = self.send_at("AT+CGPSINFO=1", timeout=3000)
-
-        if "+CGPSINFO:" not in response or response == "ERROR":
-            return None
-
-        try:
-            start = response.find("+CGPSINFO:") + 11
-            data = response[start:].strip()
-
-            if not data or data == ",":
-                return None
-
-            parts = data.split(",")
-
-            if len(parts) < 10:
-                return None
-
-            course = float(parts[8].strip()) if parts[8].strip() else 0.0
-
-            return {
-                "course": course,
-            }
-
-        except Exception as e:
-            self._log(f"VTG parse error: {e}")
-            return None
-
-    def get_gps_info_extended(self) -> dict | None:
-        """Get extended GPS information including HDOP, VDOP, course.
-
-        Returns:
-            Dict with lat, lon, alt, speed, satellites, hdop, vdop, course
-        """
-        response = self.send_at("AT+CGPSINFO=1", timeout=3000)
-
-        if "+CGPSINFO:" not in response or response == "ERROR":
-            return None
-
-        try:
-            start = response.find("+CGPSINFO:") + 11
-            data = response[start:].strip()
-
-            if not data or data == ",":
-                return None
-
-            parts = data.split(",")
-
-            if len(parts) < 10:
-                return None
-
-            lat_raw = parts[0].strip()
-            lat_dir = parts[1].strip()
-            lon_raw = parts[2].strip()
-            lon_dir = parts[3].strip()
-            date = parts[4].strip()
-            time_raw = parts[5].strip()
-            alt = float(parts[6].strip()) if parts[6].strip() else 0.0
-            speed = float(parts[7].strip()) if parts[7].strip() else 0.0
-            course = float(parts[8].strip()) if parts[8].strip() else 0.0
-            hdop = (
-                float(parts[9].strip()) if len(parts) > 9 and parts[9].strip() else 0.0
-            )
-
-            if not lat_raw or not lon_raw:
-                return None
-
-            lat = self._convert_nmea_lat(lat_raw, lat_dir)
-            lon = self._convert_nmea_lon(lon_raw, lon_dir)
-
-            return {
-                "latitude": lat,
-                "longitude": lon,
-                "altitude": alt,
-                "speed": speed,
-                "course": course,
-                "hdop": hdop,
-                "date": date,
-                "time": time_raw,
-                "satellites": 0,
-            }
-
-        except Exception as e:
-            self._log(f"GPS extended parse error: {e}")
-            return None
-
-    def get_gps_info(self) -> dict | None:
-        """Get GPS information.
-
-        Returns:
-            Dict with lat, lon, alt, speed, satellites, or None if no fix
-        """
-        response = self.send_at("AT+CGPSINFO", timeout=3000)
-
-        if "+CGPSINFO:" not in response or response == "ERROR":
-            return None
-
-        try:
-            start = response.find("+CGPSINFO:") + 11
-            data = response[start:].strip()
-
-            if not data or data == ",":
-                return None
-
-            parts = data.split(",")
-
-            if len(parts) < 6:
-                return None
-
-            lat_raw = parts[0].strip()
-            lat_dir = parts[1].strip()
-            lon_raw = parts[2].strip()
-            lon_dir = parts[3].strip()
-            date = parts[4].strip()
-            time_raw = parts[5].strip()
-            alt = (
-                float(parts[6].strip()) if len(parts) > 6 and parts[6].strip() else 0.0
-            )
-            speed = (
-                float(parts[7].strip()) if len(parts) > 7 and parts[7].strip() else 0.0
-            )
-
-            if not lat_raw or not lon_raw:
-                return None
-
-            lat = self._convert_nmea_lat(lat_raw, lat_dir)
-            lon = self._convert_nmea_lon(lon_raw, lon_dir)
-
-            return {
-                "latitude": lat,
-                "longitude": lon,
-                "altitude": alt,
-                "speed": speed,
-                "date": date,
-                "time": time_raw,
-                "satellites": 0,
+                "satellites": gps_visible + glonass_visible + beidou_visible,
+                "gps_visible": gps_visible,
+                "glonass_visible": glonass_visible,
+                "beidou_visible": beidou_visible,
+                "date": parts[8].strip() if len(parts) > 8 else "",
+                "time": parts[9].strip() if len(parts) > 9 else "",
             }
 
         except Exception as e:
             self._log(f"GPS parse error: {e}")
-            return None
-
-    def get_gps_cgnssinfo(self) -> dict | None:
-        """Get extended GPS info using AT+CGNSSINFO=1 command.
-
-        Returns extended GPS data including visible satellites, HDOP, VDOP.
-
-        Returns:
-            Dict with satellites, hdop, vdop or None
-        """
-        response = self.send_at("AT+CGNSSINFO=1", timeout=3000)
-
-        if "+CGNSSINFO:" not in response or response == "ERROR":
-            return None
-
-        try:
-            start = response.find("+CGNSSINFO:") + 12
-            data = response[start:].strip()
-
-            if not data:
-                return None
-
-            parts = data.split(",")
-
-            if len(parts) < 12:
-                return None
-
-            gps_visible = int(parts[1].strip()) if parts[1].strip() else 0
-            glonass_visible = int(parts[2].strip()) if parts[2].strip() else 0
-            beidou_visible = int(parts[3].strip()) if parts[3].strip() else 0
-
-            lat_raw = parts[4].strip() if len(parts) > 4 else ""
-            lat_dir = parts[5].strip() if len(parts) > 5 else ""
-            lon_raw = parts[6].strip() if len(parts) > 6 else ""
-            lon_dir = parts[7].strip() if len(parts) > 7 else ""
-            date = parts[8].strip() if len(parts) > 8 else ""
-            time_raw = parts[9].strip() if len(parts) > 9 else ""
-            alt = (
-                float(parts[10].strip())
-                if len(parts) > 10 and parts[10].strip()
-                else 0.0
-            )
-            speed = (
-                float(parts[11].strip())
-                if len(parts) > 11 and parts[11].strip()
-                else 0.0
-            )
-
-            course = 0.0
-            if len(parts) > 12 and parts[12].strip():
-                course = float(parts[12].strip())
-
-            hdop = 0.0
-            if len(parts) > 14 and parts[14].strip():
-                hdop = float(parts[14].strip())
-
-            vdop = 0.0
-            if len(parts) > 15 and parts[15].strip():
-                vdop = float(parts[15].strip())
-
-            if not lat_raw or not lon_raw:
-                return None
-
-            lat = self._convert_nmea_lat(lat_raw, lat_dir)
-            lon = self._convert_nmea_lon(lon_raw, lon_dir)
-
-            total_visible = gps_visible + glonass_visible + beidou_visible
-
-            return {
-                "latitude": lat,
-                "longitude": lon,
-                "altitude": alt,
-                "speed": speed,
-                "course": course,
-                "hdop": hdop,
-                "vdop": vdop,
-                "satellites": total_visible,
-                "gps_visible": gps_visible,
-                "glonass_visible": glonass_visible,
-                "beidou_visible": beidou_visible,
-                "date": date,
-                "time": time_raw,
-            }
-
-        except Exception as e:
-            self._log(f"CGNSSINFO parse error: {e}")
             return None
 
     def get_gps_location(self, timeout_ms: int = 30000) -> dict | None:
@@ -1030,7 +877,7 @@ class SIM7600:
                 end = response.find('"', start)
                 if start > 0 and end > start:
                     return response[start:end]
-            except:
+            except (ValueError, IndexError):
                 pass
 
         return None
@@ -1075,7 +922,6 @@ class SIM7600:
         if not self.gps_enabled:
             self.enable_gps()
 
-        gps_time = None
         start = time.ticks_ms()
 
         while time.ticks_diff(time.ticks_ms(), start) < timeout_ms:
@@ -1109,8 +955,8 @@ class SIM7600:
             time.sleep(2)
 
         self._log(f"GPS time sync timeout after {timeout_ms}ms")
-        self._log("GPS time sync failed, trying network time...")
-        return self.sync_time_from_network()
+        self._log("GPS time sync failed, skipping time sync")
+        return False
 
     def sync_time_from_network(self) -> bool:
         """Sync Pico system time from network.
@@ -1248,12 +1094,12 @@ class SIM7600Manager:
         }
 
     def get_gps_location(self) -> dict | None:
-        """Get GPS location with extended data using AT+CGNSSINFO.
+        """Get GPS location with all data.
 
         Returns:
             Dict with GPS data or None
         """
-        return self.sim.get_gps_cgnssinfo()
+        return self.sim.get_gps_info()
 
     def sync_time(self) -> bool:
         """Sync time from GPS.

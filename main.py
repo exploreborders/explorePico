@@ -40,10 +40,6 @@ try:
     from config import (
         GITHUB_OWNER,
         GITHUB_REPO,
-        WIFI_SSID,
-        WIFI_PASSWORD,
-        WIFI_SSID_2,
-        WIFI_PASSWORD_2,
         UPDATE_BUTTON_PIN,
         LTE_ENABLED,
         LTE_APN,
