@@ -36,7 +36,7 @@ Secrets:
 """
 
 # MQTT Configuration
-MQTT_SSL = False  # Enable SSL/TLS
+MQTT_SSL = True  # Enable SSL (port 8883 - works with LTE)
 
 # Device Configuration
 DEVICE_NAME = "Raspberry Pi Pico 2W"
@@ -137,7 +137,7 @@ LTE_BAUD = 115200  # Default baud rate
 LTE_APN = "internet"  # O2 APN
 LTE_SIM_PIN = "5046"  # O2 SIM PIN
 LTE_SYNC_TIME_ON_BOOT = (
-    False  # Disable time sync on boot (time sync will retry in main loop)
+    True  # Enable time sync (auto-detected in code based on MQTT_SSL)
 )
 LTE_CONNECT_TIMEOUT_MS = 90000
 

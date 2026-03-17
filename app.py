@@ -59,6 +59,7 @@ try:
         get_gps_location,
         get_signal_info,
         get_network_info,
+        sync_time,
     )
 
     LTE_AVAILABLE = True
@@ -690,6 +691,9 @@ def connect_mqtt() -> bool:
     blink_pattern("10")
 
     try:
+        # Small delay to ensure network is fully established
+        time.sleep(2)
+
         mqtt_client = create_mqtt_client()
         mqtt_client.connect()
         time.sleep(1)  # Wait for SSL handshake to complete

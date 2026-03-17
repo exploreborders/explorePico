@@ -116,10 +116,23 @@ def connect_lte(
         return False
 
     if sync_time:
-        sim.enable_gps()
-        if not sim.sync_time_from_gps(timeout_ms=30000):
-            _log("LTE", "GPS time sync failed, trying WiFi...")
-            return False
+        # Only require time sync if SSL is enabled (needed for certificate validation)
+        from config import MQTT_SSL
+
+        if MQTT_SSL:
+            # Try NTP first (fast, < 1 second)
+            _log("LTE", "SSL enabled, syncing time via NTP (fast)...")
+            if sync_time_ntp():
+                _log("LTE", "NTP time sync succeeded!")
+            else:
+                # NTP failed, try GPS as fallback but don't block
+                _log("LTE", "NTP failed, trying GPS...")
+                sim.enable_gps()
+                if not sim.sync_time_from_gps(timeout_ms=10000):
+                    _log("LTE", "GPS time sync timeout, continuing anyway...")
+                _log("LTE", "Time sync will retry in main loop")
+        else:
+            _log("LTE", "Non-SSL MQTT, skipping time sync")
 
     _log("LTE", f"Connecting to LTE (APN: {apn})...")
 
@@ -154,6 +167,17 @@ def get_lte_manager() -> SIM7600Manager | None:
         SIM7600Manager or None
     """
     return _lte_manager
+
+
+def get_lte_ip_address() -> str | None:
+    """Get the LTE IP address.
+
+    Returns:
+        IP address string or None
+    """
+    if not _lte_manager:
+        return None
+    return _lte_manager.get_ip_address()
 
 
 def get_gps_location(timeout_ms: int = 30000) -> dict | None:
@@ -199,13 +223,65 @@ def get_network_info() -> dict:
     return _lte_manager.get_network_info()
 
 
-def sync_time() -> bool:
-    """Sync system time from GPS.
+def sync_time_ntp() -> bool:
+    """Sync system time from NTP server (fast, internet-based).
 
     Returns:
-        True if synced
+        True if synced successfully
     """
+    if not is_lte_connected() and not is_wifi_connected():
+        _log("TIME", "No network connection for NTP sync")
+        return False
+
+    try:
+        import ntptime
+
+        ntptime.host = "pool.ntp.org"
+        ntptime.settime()
+
+        import time
+
+        now = time.localtime()
+        _log(
+            "TIME",
+            f"NTP time synced: {now[0]}-{now[1]:02d}-{now[2]:02d} {now[3]:02d}:{now[4]:02d}:{now[5]:02d}",
+        )
+        return True
+    except Exception as e:
+        _log("TIME", f"NTP sync failed: {e}")
+        return False
+
+
+def is_wifi_connected() -> bool:
+    """Check if WiFi is connected.
+
+    Returns:
+        True if WiFi is connected
+    """
+    try:
+        import network
+
+        sta = network.WLAN(network.STA_IF)
+        return sta.isconnected()
+    except:
+        return False
+
+
+def sync_time() -> bool:
+    """Sync system time - tries NTP first (fast), then GPS (fallback).
+
+    Returns:
+        True if synced via any method
+    """
+    # Try NTP first (fast, takes < 1 second)
+    _log("TIME", "Trying NTP sync (fast)...")
+    if sync_time_ntp():
+        return True
+
+    # Fall back to GPS if NTP fails
+    _log("TIME", "NTP failed, trying GPS...")
     if not _lte_manager:
+        _log("TIME", "No LTE manager for GPS sync")
         return False
 
     return _lte_manager.sync_time()

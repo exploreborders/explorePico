@@ -480,7 +480,32 @@ class SIM7600:
 
         self.lte_connected = True
         self._log("LTE connected successfully")
+
+        # Get and log IP address
+        ip_addr = self.get_ip_address()
+        if ip_addr:
+            self._log(f"LTELTE IP address: {ip_addr}")
+
         return True
+
+    def get_ip_address(self) -> str | None:
+        """Get the LTE IP address.
+
+        Returns:
+            IP address string or None
+        """
+        try:
+            response = self.send_at("AT+CGCONTRDP=1", timeout=3000)
+            # Response format: +CGCONTRDP: 1,5,"internet","10.1.1.1","8.8.8.8"
+            if "+CGCONTRDP:" in response:
+                parts = response.split(",")
+                if len(parts) >= 3:
+                    # Extract IP from the third part (removing quotes)
+                    ip = parts[2].strip().strip('"')
+                    return ip
+        except Exception as e:
+            self._log(f"Failed to get IP: {e}")
+        return None
 
     def disconnect_lte(self) -> bool:
         """Disconnect from LTE network."""
@@ -1063,6 +1088,14 @@ class SIM7600Manager:
             True if connected
         """
         return self.sim.is_connected()
+
+    def get_ip_address(self) -> str | None:
+        """Get the LTE IP address.
+
+        Returns:
+            IP address string or None
+        """
+        return self.sim.get_ip_address()
 
     def get_signal_info(self) -> dict:
         """Get signal information.
