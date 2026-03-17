@@ -225,8 +225,8 @@ led.off()
 # MQTT state
 mqtt_client = None
 led_state = False
-update_state = "Update Pico"  # Update Pico, checking, downloading, applying, rebooting, up_to_date, error
-latest_version_received = None  # Latest version from GitHub webhook
+update_state = "Update Pico"
+latest_version_received = None
 last_sensor_publish = 0
 _last_mqtt_values = {}
 
@@ -236,6 +236,7 @@ last_gps_publish = 0
 last_signal_publish = 0
 last_network_publish = 0
 connection_type = "offline"
+time_synced = False  # Track if time has been synced from GPS
 
 
 # -----------------------------------------------------------------------------
@@ -877,9 +878,29 @@ def run_main_loop() -> None:
 # -----------------------------------------------------------------------------
 # ENTRY POINT
 # -----------------------------------------------------------------------------
+def try_time_sync() -> bool:
+    """Try to sync time from GPS. Returns True if successful."""
+    global time_synced
+    if time_synced:
+        return True
+
+    if not LTE_AVAILABLE or not is_lte_connected():
+        return False
+
+    try:
+        if sync_time():
+            time_synced = True
+            log("TIME", "Time synced successfully in main loop")
+            return True
+    except Exception as e:
+        log("TIME", f"Time sync retry error: {e}")
+
+    return False
+
+
 def main() -> None:
     """Main entry point."""
-    global last_sensor_publish, mqtt_client
+    global last_sensor_publish, mqtt_client, time_synced
 
     validate_config()
 
@@ -889,13 +910,36 @@ def main() -> None:
 
     disconnect_mqtt()
 
+    # Initial time sync attempt (will retry in main loop if fails)
+    time_synced = False
+
     reconnect_count = 0
+    time_sync_retry_count = 0
+    last_time_sync_retry = 0
+    TIME_SYNC_RETRY_INTERVAL_MS = 300000  # Retry every 5 minutes
 
     while True:
         # Check LTE first, only use WiFi as fallback
         if LTE_AVAILABLE and is_lte_connected():
-            # LTE is connected, proceed with MQTT
-            pass
+            # Try to sync time if not yet synced or retry interval passed
+            if not time_synced:
+                now = time.ticks_ms()
+                if (
+                    time_sync_retry_count == 0
+                    or time.ticks_diff(now, last_time_sync_retry)
+                    >= TIME_SYNC_RETRY_INTERVAL_MS
+                ):
+                    log("TIME", "Attempting time sync in main loop...")
+                    last_time_sync_retry = now
+                    if try_time_sync():
+                        time_synced = True
+                        time_sync_retry_count = 0
+                    else:
+                        time_sync_retry_count += 1
+                        log(
+                            "TIME",
+                            f"Time sync failed (attempt {time_sync_retry_count}), will retry in {TIME_SYNC_RETRY_INTERVAL_MS / 1000}s",
+                        )
         else:
             # LTE not connected, ensure WiFi
             if not ensure_wifi():

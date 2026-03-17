@@ -171,6 +171,14 @@ class SIM7600:
                 break
             time.sleep(1)
 
+        self._log("Enabling automatic GPS (AT+CGPSAUTO=1)...")
+        for _ in range(3):
+            resp = self._send_at_simple("AT+CGPSAUTO=1", timeout=2000)
+            if resp and "OK" in resp:
+                self._log("Automatic GPS enabled!")
+                break
+            time.sleep(0.5)
+
         self._log("SIM7600 initialized successfully!")
         return True
 
@@ -606,12 +614,26 @@ class SIM7600:
     # -------------------------------------------------------------------------
     # GPS Functions
     # -------------------------------------------------------------------------
+    def is_gps_auto_enabled(self) -> bool:
+        """Check if automatic GPS is enabled.
+
+        Returns:
+            True if automatic GPS is enabled
+        """
+        response = self.send_at("AT+CGPSAUTO?", timeout=2000)
+        return "+CGPSAUTO: 1" in response
+
     def enable_gps(self) -> bool:
-        """Enable GPS.
+        """Enable GPS (manual mode).
 
         Returns:
             True if successful
         """
+        # Check if auto GPS is already enabled
+        if self.gps_enabled:
+            self._log("GPS already enabled")
+            return True
+
         response = self.send_at("AT+CGPS=1,1", timeout=5000)
         if "OK" in response:
             self.gps_enabled = True
@@ -828,22 +850,54 @@ class SIM7600:
     # -------------------------------------------------------------------------
     # Time Functions
     # -------------------------------------------------------------------------
-    def get_network_time(self) -> str | None:
-        """Get network time from SIM7600.
+    def get_gps_time_simple(self) -> tuple[str, str] | None:
+        """Get GPS time using AT+CGPSINFO (works without position fix).
 
         Returns:
-            ISO format time string or None
+            Tuple of (date, time) or None if not available
+            Example: ("170326", "115708.0")
         """
-        response = self.send_at("AT+CCLK?")
+        response = self.send_at("AT+CGPSINFO", timeout=3000)
 
-        if "+CCLK:" in response:
-            try:
-                start = response.find('"') + 1
-                end = response.find('"', start)
-                if start > 0 and end > start:
-                    return response[start:end]
-            except (ValueError, IndexError):
+        if "+CGPSINFO:" not in response:
+            return None
+
+        try:
+            # Format: +CGPSINFO: lat,lon,alt,speed,course,time
+            # Time is in last field: DDMMYYHHMMSS.SSS
+            # Can have time even without lat/lon
+
+            if "+CGPSINFO: ,,,,,,,," in response:
+                # No position data, check if time is available in raw response
                 pass
+
+            # Find the data after +CGPSINFO:
+            data_start = response.find("+CGPSINFO:") + 11
+            data = response[data_start:].strip()
+
+            if not data:
+                return None
+
+            # Split and check if we have time (last field)
+            parts = data.split(",")
+
+            # Time is always in field 6 (index 6), even if lat/lon are empty
+            if len(parts) < 7:
+                return None
+
+            time_field = parts[6].strip() if len(parts) > 6 else ""
+
+            if not time_field or time_field == "":
+                return None
+
+            # Time format: DDMMYYHHMMSS.SSS (e.g., "170326115708.0")
+            if len(time_field) >= 6:
+                date_str = time_field[0:6]  # DDMMYY
+                time_str = time_field[6:14]  # HHMMSS
+                return (date_str, time_str)
+
+        except Exception as e:
+            self._log(f"GPS time parse error: {e}")
 
         return None
 
@@ -873,30 +927,40 @@ class SIM7600:
 
         return None
 
-    def sync_time_from_gps(self, timeout_ms: int = 30000) -> bool:
-        """Sync Pico system time from GPS.
+    def sync_time_from_gps(self, timeout_ms: int = 60000) -> bool:
+        """Sync Pico system time from GPS using CGPSINFO (no position fix needed).
 
         Args:
-            timeout_ms: Maximum wait time for GPS fix
+            timeout_ms: Maximum wait time for GPS time
 
         Returns:
             True if time was synced
         """
-        self._log("Syncing time from GPS...")
+        self._log("Syncing time from GPS (using CGPSINFO)...")
 
+        # Check if GPS is already enabled (auto GPS may have started it)
         if not self.gps_enabled:
-            self.enable_gps()
+            # Try to enable GPS manually, but also check auto status
+            self._log("GPS not enabled, checking auto GPS status...")
+            if self.is_gps_auto_enabled():
+                self._log("Auto GPS is enabled, GPS may already be running")
+                # Give GPS a moment to start if auto-enabled
+                time.sleep(2)
+            else:
+                self.enable_gps()
 
         start = time.ticks_ms()
+        attempt = 0
 
         while time.ticks_diff(time.ticks_ms(), start) < timeout_ms:
-            gps = self.get_gps_info()
+            attempt += 1
 
-            if gps and gps.get("time") and gps.get("date"):
+            # Use simpler CGPSINFO that doesn't require position fix
+            result = self.get_gps_time_simple()
+
+            if result:
                 try:
-                    time_str = gps["time"]
-                    date_str = gps["date"]
-
+                    date_str, time_str = result
                     self._log(f"GPS date: {date_str}, time: {time_str}")
 
                     hour = int(time_str[:2])
@@ -917,47 +981,15 @@ class SIM7600:
                 except Exception as e:
                     self._log(f"GPS time sync error: {e}")
 
+            # Log progress every 10 seconds
+            elapsed = time.ticks_diff(time.ticks_ms(), start)
+            if attempt % 5 == 0:
+                self._log(f"GPS time sync attempt {attempt}, waiting... ({elapsed}ms)")
+
             time.sleep(2)
 
         self._log(f"GPS time sync timeout after {timeout_ms}ms")
         self._log("GPS time sync failed, skipping time sync")
-        return False
-
-    def sync_time_from_network(self) -> bool:
-        """Sync Pico system time from network.
-
-        Returns:
-            True if time was synced
-        """
-        net_time = self.get_network_time()
-
-        if net_time:
-            self._log(f"Raw network time: {net_time}")
-            try:
-                date_time = net_time.split(",")[0]
-                time_part = net_time.split(",")[1].split("+")[0].strip()
-
-                date_parts = date_time.split("/")
-                year = int(date_parts[0]) + 2000
-                month = int(date_parts[1])
-                day = int(date_parts[2])
-
-                time_parts = time_part.split(":")
-                hour = int(time_parts[0])
-                minute = int(time_parts[1])
-                second = int(time_parts[2])
-
-                rtc = machine.RTC()
-                rtc.datetime((year, month, day, 0, hour, minute, second, 0))
-
-                self._log(
-                    f"Network time synced: {year}-{month:02d}-{day:02d} {hour:02d}:{minute:02d}:{second:02d}"
-                )
-                return True
-
-            except Exception as e:
-                self._log(f"Network time sync error: {e}, raw: {net_time}")
-
         return False
 
 
