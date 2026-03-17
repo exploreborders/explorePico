@@ -4,12 +4,12 @@ SIM7600G-H 4G LTE Driver for Pico 2W
 Hardware:
     - Module: SIM7600G-H (SIMCom)
     - Interface: UART
-    - Features: 4G LTE, GPS, MQTT, TCP/IP
+    - Features: 4G LTE, GPS
 
 Features:
     - LTE network connection (4G/3G/2G)
     - GPS positioning (GPS/GLONASS/BeiDou/Galileo)
-    - Time sync from GPS
+    - Time sync from GPS or NTP
     - Signal quality monitoring
     - Network information
 
@@ -19,7 +19,6 @@ AT Commands:
     - GPRS: AT+CGDCONT, AT+CGACT
     - GPS: AT+CGPS, AT+CGPSINFO
     - Signal: AT+CSQ
-    - MQTT: AT+CMQTTSTART, etc.
     - Time: AT+CCLK
 
 Usage:
@@ -228,37 +227,6 @@ class SIM7600:
         except Exception as e:
             self._log(f"AT send error: {e}")
             return "ERROR"
-
-    def send_at_raw(self, command: str, timeout: int = 1000) -> str:
-        """Send AT command and return raw response.
-
-        Args:
-            command: AT command
-            timeout: Timeout in ms
-
-        Returns:
-            Raw response string
-        """
-        if not self.uart:
-            return ""
-
-        try:
-            self.uart.write(command.encode() + b"\r\n")
-            start = time.ticks_ms()
-            response = ""
-
-            while time.ticks_diff(time.ticks_ms(), start) < timeout:
-                if self.uart.any():
-                    char = self.uart.read(1)
-                    if char:
-                        response += char.decode("utf-8", "ignore")
-                else:
-                    time.sleep(0.01)
-
-            return response.strip()
-
-        except Exception:
-            return ""
 
     # -------------------------------------------------------------------------
     # LTE / Network Functions
@@ -484,7 +452,7 @@ class SIM7600:
         # Get and log IP address
         ip_addr = self.get_ip_address()
         if ip_addr:
-            self._log(f"LTELTE IP address: {ip_addr}")
+            self._log(f"LTE IP address: {ip_addr}")
 
         return True
 
@@ -923,32 +891,6 @@ class SIM7600:
 
         except Exception as e:
             self._log(f"GPS time parse error: {e}")
-
-        return None
-
-    def get_gps_time(self) -> str | None:
-        """Get GPS time from NMEA.
-
-        Returns:
-            ISO format time string or None
-        """
-        gps = self.get_gps_info()
-
-        if gps and gps.get("time") and gps.get("date"):
-            try:
-                time_str = gps["time"]
-                date_str = gps["date"]
-
-                hour = int(time_str[:2])
-                minute = int(time_str[2:4])
-                second = int(time_str[4:6])
-                day = int(date_str[:2])
-                month = int(date_str[2:4])
-                year = int(date_str[4:6]) + 2000
-
-                return f"{year:04d}-{month:02d}-{day:02d}T{hour:02d}:{minute:02d}:{second:02d}"
-            except (ValueError, IndexError, TypeError):
-                pass
 
         return None
 
