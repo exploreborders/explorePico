@@ -873,7 +873,7 @@ class SIM7600:
 
         return None
 
-    def sync_time_from_gps(self, timeout_ms: int = 60000) -> bool:
+    def sync_time_from_gps(self, timeout_ms: int = 30000) -> bool:
         """Sync Pico system time from GPS.
 
         Args:

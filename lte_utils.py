@@ -117,11 +117,9 @@ def connect_lte(
 
     if sync_time:
         sim.enable_gps()
-
-        if sim.sync_time_from_gps(timeout_ms=60000):
-            pass
-        else:
-            _log("LTE", "GPS time sync failed, skipping time sync")
+        if not sim.sync_time_from_gps(timeout_ms=30000):
+            _log("LTE", "GPS time sync failed, trying WiFi...")
+            return False
 
     _log("LTE", f"Connecting to LTE (APN: {apn})...")
 
