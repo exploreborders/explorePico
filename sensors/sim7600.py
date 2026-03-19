@@ -63,6 +63,7 @@ class SIM7600:
         self._logger = print
 
         self.gps_enabled = False
+        self.gps_configured = False
         self.lte_connected = False
 
     def set_logger(self, logger) -> None:
@@ -88,7 +89,7 @@ class SIM7600:
 
             while time.ticks_diff(time.ticks_ms(), start) < timeout:
                 if self.uart.any():
-                    data = self.uart.read(64)
+                    data = self.uart.read(256)
                     if data:
                         response += data.decode("utf-8", "ignore")
 
@@ -670,20 +671,18 @@ class SIM7600:
         return False
 
     def get_gps_info(self) -> dict | None:
-        """Get all GPS data using AT+CGNSSINFO=1.
+        """Get GPS data using AT+CGNSSINFO=1.
 
         Returns:
-            Dict with latitude, longitude, altitude, speed, course,
-            satellites, hdop, vdop, date, time or None if no fix
+            Dict with latitude, longitude, altitude, speed, satellites,
+            gps_svs, glonass_svs, beidou_svs, pdop, date, time or None.
         """
         response = self.send_at("AT+CGNSSINFO=1", timeout=3000)
         self._log(f"GPS raw: {response}")
 
-        # Handle response format: +CGNSSINFO: GNSSINFO: x,... or +CGNSSINFO: x,...
         if "+CGNSSINFO:" not in response:
             return None
 
-        # Find the actual data start (after the last :)
         data_start = response.rfind(":") + 1
         data = response[data_start:].strip()
 
@@ -693,7 +692,7 @@ class SIM7600:
         try:
             parts = data.split(",")
 
-            if len(parts) < 13:
+            if len(parts) < 14:
                 return None
 
             lat_raw = parts[4].strip() if len(parts) > 4 and parts[4].strip() else ""
@@ -704,29 +703,32 @@ class SIM7600:
             if not lat_raw or not lon_raw:
                 return None
 
-            gps_visible = 0
+            gps_svs = 0
             if len(parts) > 1 and parts[1].strip():
                 try:
-                    gps_visible = int(parts[1].strip())
+                    gps_svs = int(parts[1].strip())
                 except ValueError:
                     pass
 
-            glonass_visible = 0
+            glonass_svs = 0
             if len(parts) > 2 and parts[2].strip():
                 try:
-                    glonass_visible = int(parts[2].strip())
+                    glonass_svs = int(parts[2].strip())
                 except ValueError:
                     pass
 
-            beidou_visible = 0
+            beidou_svs = 0
             if len(parts) > 3 and parts[3].strip():
                 try:
-                    beidou_visible = int(parts[3].strip())
+                    beidou_svs = int(parts[3].strip())
                 except ValueError:
                     pass
 
             lat = self._convert_nmea_lat(lat_raw, lat_dir)
             lon = self._convert_nmea_lon(lon_raw, lon_dir)
+
+            if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+                return None
 
             alt = 0.0
             if len(parts) > 10 and parts[10].strip():
@@ -742,24 +744,17 @@ class SIM7600:
                 except ValueError:
                     pass
 
+            pdop = 0.0
+            if len(parts) > 13 and parts[13].strip():
+                try:
+                    pdop = float(parts[13].strip())
+                except ValueError:
+                    pass
+
             course = 0.0
             if len(parts) > 12 and parts[12].strip():
                 try:
                     course = float(parts[12].strip())
-                except ValueError:
-                    pass
-
-            hdop = 0.0
-            if len(parts) > 13 and parts[13].strip():
-                try:
-                    hdop = float(parts[13].strip())
-                except ValueError:
-                    pass
-
-            vdop = 0.0
-            if len(parts) > 14 and parts[14].strip():
-                try:
-                    vdop = float(parts[14].strip())
                 except ValueError:
                     pass
 
@@ -769,12 +764,11 @@ class SIM7600:
                 "altitude": alt,
                 "speed": speed,
                 "course": course,
-                "hdop": hdop,
-                "vdop": vdop,
-                "satellites": gps_visible + glonass_visible + beidou_visible,
-                "gps_visible": gps_visible,
-                "glonass_visible": glonass_visible,
-                "beidou_visible": beidou_visible,
+                "pdop": pdop,
+                "satellites": gps_svs + glonass_svs + beidou_svs,
+                "gps_svs": gps_svs,
+                "glonass_svs": glonass_svs,
+                "beidou_svs": beidou_svs,
                 "date": parts[8].strip() if len(parts) > 8 else "",
                 "time": parts[9].strip() if len(parts) > 9 else "",
             }
@@ -885,6 +879,16 @@ class SIM7600:
 
                 if lat != 0 and lon != 0:
                     return result
+
+            # Fall back to CGNSSINFO for satellite counts and PDOP
+            gnss_result = self.get_gps_info()
+
+            if gnss_result:
+                lat = gnss_result.get("latitude", 0)
+                lon = gnss_result.get("longitude", 0)
+
+                if lat != 0 and lon != 0:
+                    return gnss_result
 
             time.sleep(1)
 
@@ -1179,7 +1183,7 @@ class SIM7600Manager:
         Returns:
             Dict with GPS data or None
         """
-        return self.sim.get_gps_cgpsinfo()
+        return self.sim.get_gps_info()
 
     def sync_time(self) -> bool:
         """Sync time from GPS.

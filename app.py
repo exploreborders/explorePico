@@ -130,7 +130,6 @@ from config import (
     TOPIC_GPS_SPEED,
     TOPIC_GPS_SATELLITES,
     TOPIC_GPS_HDOP,
-    TOPIC_GPS_VDOP,
     TOPIC_GPS_COURSE,
     TOPIC_GPS_INTERVAL_SET,
 )
@@ -662,10 +661,8 @@ def handle_gps_publish() -> None:
             mqtt_publish(TOPIC_GPS_ALTITUDE, str(data.get("altitude", 0)))
             mqtt_publish(TOPIC_GPS_SPEED, str(data.get("speed", 0)))
             mqtt_publish(TOPIC_GPS_SATELLITES, str(data.get("satellites", 0)))
-            hdop = data.get("hdop", 0)
-            vdop = data.get("vdop", 0)
-            mqtt_publish(TOPIC_GPS_HDOP, str(round(hdop * 5, 1)))
-            mqtt_publish(TOPIC_GPS_VDOP, str(round(vdop * 5, 1)))
+            pdop = data.get("pdop", 0)
+            mqtt_publish(TOPIC_GPS_HDOP, str(round(pdop * 5, 1)))
             mqtt_publish(TOPIC_GPS_COURSE, str(data.get("course", 0)))
         last_gps_publish = now
 

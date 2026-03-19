@@ -286,24 +286,10 @@ mqtt:
           - pico2w
         name: "Raspberry Pi Pico 2W"
 
-    # GPS HDOP Accuracy (meters)
-    - name: "Pico GPS HDOP Accuracy"
+    # GPS PDOP Accuracy (meters) - derived from PDOP × 5
+    - name: "Pico GPS PDOP Accuracy"
       unique_id: "pico_gps_hdop_accuracy"
       state_topic: "homeassistant/pico/sensor/gps_hdop_accuracy"
-      unit_of_measurement: "m"
-      availability:
-        topic: "homeassistant/pico/availability"
-        payload_available: "online"
-        payload_not_available: "offline"
-      device:
-        identifiers:
-          - pico2w
-        name: "Raspberry Pi Pico 2W"
-
-    # GPS VDOP Accuracy (meters)
-    - name: "Pico GPS VDOP Accuracy"
-      unique_id: "pico_gps_vdop_accuracy"
-      state_topic: "homeassistant/pico/sensor/gps_vdop_accuracy"
       unit_of_measurement: "m"
       availability:
         topic: "homeassistant/pico/availability"
