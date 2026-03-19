@@ -19,6 +19,7 @@ Usage:
     init_gps(uart_id=0, tx_pin=0, rx_pin=1)  # GPS works with any connection
     if connect_lte("internet", "5046"):
         print("LTE connected!")
+    location = get_gps_location()
 """
 
 from sensors.sim7600 import SIM7600, SIM7600Manager
@@ -57,7 +58,6 @@ def init_gps(
 
     Boots the SIM7600, enables GPS, and optionally syncs time.
     Works with any network connection (WiFi or LTE).
-    Must be called before start_gps_polling().
 
     Args:
         uart_id: UART peripheral (0 or 1)
@@ -176,11 +176,11 @@ def get_lte_manager() -> SIM7600Manager | None:
     return _lte_manager
 
 
-def get_gps_location(timeout_ms: int = 30000) -> dict | None:
-    """Get GPS location.
+def get_gps_location(timeout_ms: int = 2000) -> dict | None:
+    """Get GPS location (single poll, non-blocking when fix exists).
 
     Args:
-        timeout_ms: Maximum wait time for fix
+        timeout_ms: Maximum wait time for fix (default 2s)
 
     Returns:
         Dict with lat, lon, alt, speed, satellites or None
@@ -189,28 +189,6 @@ def get_gps_location(timeout_ms: int = 30000) -> dict | None:
         return None
 
     return _lte_manager.get_gps_location()
-
-
-def start_gps_polling(interval_s: int = 5) -> None:
-    """Start background GPS polling thread.
-
-    Args:
-        interval_s: Seconds between GPS reads
-    """
-    if _lte_manager:
-        _lte_manager.start_gps_polling(interval_s)
-
-
-def get_gps_cached() -> dict | None:
-    """Get last cached GPS data (non-blocking).
-
-    Returns:
-        Dict with GPS data or None if no fix yet
-    """
-    if not _lte_manager:
-        return None
-
-    return _lte_manager.get_gps_cached()
 
 
 def get_signal_info() -> dict:

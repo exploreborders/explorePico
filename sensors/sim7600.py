@@ -32,7 +32,6 @@ Usage:
 """
 
 import time
-import _thread
 import machine
 from machine import UART, Pin
 
@@ -65,10 +64,6 @@ class SIM7600:
 
         self.gps_enabled = False
         self.lte_connected = False
-
-        self._gps_cache: dict | None = None
-        self._gps_lock = _thread.allocate_lock()
-        self._gps_thread_running = False
 
     def set_logger(self, logger) -> None:
         """Set custom logger function."""
@@ -612,11 +607,26 @@ class SIM7600:
     # GPS Functions
     # -------------------------------------------------------------------------
     def enable_gps(self) -> bool:
-        """Enable GPS.
+        """Enable GPS with antenna power (for active antennas).
+
+        Enables CVAUX antenna power supply before starting GPS engine.
+        Required for active antennas with amplifier (e.g., ceramic GPS antennas).
 
         Returns:
             True if successful
         """
+        # Enable antenna power supply (CVAUX pin)
+        self.send_at("AT+CVAUXS=1", timeout=3000)
+        self._log("GPS antenna power enabled")
+
+        # Set antenna voltage to 3.3V (active antennas typically need 2.7-5V)
+        self.send_at("AT+CVAUXV=3300", timeout=3000)
+        self._log("GPS antenna voltage set to 3.3V")
+
+        # Wait for antenna amplifier to stabilize
+        time.sleep(1)
+
+        # Enable GPS engine (cold start)
         response = self.send_at("AT+CGPS=1,1", timeout=5000)
         if "OK" in response:
             self.gps_enabled = True
@@ -625,7 +635,7 @@ class SIM7600:
         return False
 
     def disable_gps(self) -> bool:
-        """Disable GPS.
+        """Disable GPS and antenna power.
 
         Returns:
             True if successful
@@ -633,6 +643,7 @@ class SIM7600:
         response = self.send_at("AT+CGPS=0", timeout=5000)
         if "OK" in response:
             self.gps_enabled = False
+            self.send_at("AT+CVAUXS=0", timeout=3000)
             self._log("GPS disabled")
             return True
         return False
@@ -751,8 +762,90 @@ class SIM7600:
             self._log(f"GPS parse error: {e}")
             return None
 
+    def get_gps_cgpsinfo(self) -> dict | None:
+        """Get GPS data using AT+CGPSINFO (GPS-only, faster fix).
+
+        Response: <lat>,<lat_dir>,<lon>,<lon_dir>,<date>,<time>,<alt>,<speed>,<course>
+
+        Returns:
+            Dict with latitude, longitude, altitude, speed, course,
+            date, time or None if no fix. Satellites/DOP always 0.
+        """
+        response = self.send_at("AT+CGPSINFO", timeout=3000)
+        self._log(f"GPS raw: {response}")
+
+        if "+CGPSINFO:" not in response:
+            return None
+
+        data_start = response.rfind(":") + 1
+        data = response[data_start:].strip()
+
+        if not data:
+            return None
+
+        try:
+            parts = data.split(",")
+
+            if len(parts) < 9:
+                return None
+
+            lat_raw = parts[0].strip()
+            lat_dir = parts[1].strip()
+            lon_raw = parts[2].strip()
+            lon_dir = parts[3].strip()
+
+            if not lat_raw or not lon_raw:
+                return None
+
+            lat = self._convert_nmea_lat(lat_raw, lat_dir)
+            lon = self._convert_nmea_lon(lon_raw, lon_dir)
+
+            date_str = parts[4].strip() if len(parts) > 4 else ""
+            time_str = parts[5].strip() if len(parts) > 5 else ""
+
+            alt = 0.0
+            if parts[6].strip():
+                try:
+                    alt = float(parts[6].strip())
+                except ValueError:
+                    pass
+
+            speed = 0.0
+            if parts[7].strip():
+                try:
+                    speed = float(parts[7].strip())
+                except ValueError:
+                    pass
+
+            course = 0.0
+            if parts[8].strip():
+                try:
+                    course = float(parts[8].strip())
+                except ValueError:
+                    pass
+
+            return {
+                "latitude": lat,
+                "longitude": lon,
+                "altitude": alt,
+                "speed": speed,
+                "course": course,
+                "satellites": 0,
+                "hdop": 0.0,
+                "vdop": 0.0,
+                "date": date_str,
+                "time": time_str,
+            }
+
+        except Exception as e:
+            self._log(f"GPS parse error: {e}")
+            return None
+
     def get_gps_location(self, timeout_ms: int = 30000) -> dict | None:
         """Get GPS location, waiting for fix.
+
+        Tries CGPSINFO first (GPS-only, faster fix), falls back to
+        CGNSSINFO (multi-constellation, more satellites).
 
         Args:
             timeout_ms: Maximum wait time for fix
@@ -767,7 +860,8 @@ class SIM7600:
         last_result = None
 
         while time.ticks_diff(time.ticks_ms(), start) < timeout_ms:
-            result = self.get_gps_info()
+            # Try CGPSINFO first (GPS-only, faster)
+            result = self.get_gps_cgpsinfo()
 
             if result:
                 lat = result.get("latitude", 0)
@@ -776,52 +870,21 @@ class SIM7600:
                 if lat != 0 and lon != 0:
                     return result
 
+            # Fall back to CGNSSINFO for multi-constellation data
+            if not result:
+                result = self.get_gps_info()
+
+                if result:
+                    lat = result.get("latitude", 0)
+                    lon = result.get("longitude", 0)
+
+                    if lat != 0 and lon != 0:
+                        return result
+
             last_result = result
             time.sleep(2)
 
         return last_result
-
-    def _gps_poll_thread(self, interval_s: int) -> None:
-        """Background thread that polls GPS and caches the result.
-
-        Args:
-            interval_s: Seconds between GPS reads
-        """
-        while self._gps_thread_running:
-            try:
-                result = self.get_gps_location(timeout_ms=5000)
-                if result:
-                    with self._gps_lock:
-                        self._gps_cache = result
-            except Exception as e:
-                self._log(f"GPS poll error: {e}")
-            time.sleep(interval_s)
-
-    def start_gps_polling(self, interval_s: int = 5) -> None:
-        """Start background GPS polling thread.
-
-        Args:
-            interval_s: Seconds between GPS reads (default 5)
-        """
-        if self._gps_thread_running:
-            return
-        self._gps_thread_running = True
-        _thread.start_new_thread(self._gps_poll_thread, (interval_s,))
-        self._log(f"GPS polling started (every {interval_s}s)")
-
-    def stop_gps_polling(self) -> None:
-        """Stop background GPS polling thread."""
-        self._gps_thread_running = False
-        self._log("GPS polling stopped")
-
-    def get_gps_cached(self) -> dict | None:
-        """Get last cached GPS data (non-blocking, thread-safe).
-
-        Returns:
-            Dict with GPS data or None if no fix yet
-        """
-        with self._gps_lock:
-            return self._gps_cache
 
     def _convert_nmea_lat(self, raw: str, direction: str) -> float:
         """Convert NMEA latitude to decimal degrees.
@@ -938,7 +1001,7 @@ class SIM7600:
         start = time.ticks_ms()
 
         while time.ticks_diff(time.ticks_ms(), start) < timeout_ms:
-            gps = self.get_gps_info()
+            gps = self.get_gps_cgpsinfo()
 
             if gps and gps.get("time") and gps.get("date"):
                 try:
@@ -1121,23 +1184,3 @@ class SIM7600Manager:
             True if synced
         """
         return self.sim.sync_time_from_gps()
-
-    def start_gps_polling(self, interval_s: int = 5) -> None:
-        """Start background GPS polling.
-
-        Args:
-            interval_s: Seconds between GPS reads
-        """
-        self.sim.start_gps_polling(interval_s)
-
-    def stop_gps_polling(self) -> None:
-        """Stop background GPS polling."""
-        self.sim.stop_gps_polling()
-
-    def get_gps_cached(self) -> dict | None:
-        """Get last cached GPS data (non-blocking).
-
-        Returns:
-            Dict with GPS data or None
-        """
-        return self.sim.get_gps_cached()

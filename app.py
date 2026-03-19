@@ -55,8 +55,7 @@ from sensors.ads1115 import ADS1115
 try:
     from lte_utils import (
         is_lte_connected,
-        get_gps_cached,
-        start_gps_polling,
+        get_gps_location,
         get_signal_info,
         get_network_info,
     )
@@ -220,6 +219,7 @@ _last_mqtt_values = {}
 # LTE/GPS state
 gps_update_interval_ms = GPS_UPDATE_INTERVAL_MS
 last_gps_publish = 0
+_last_gps_fix: dict | None = None
 last_signal_publish = 0
 last_network_publish = 0
 connection_type = "offline"
@@ -639,26 +639,34 @@ def handle_lte_network_publish() -> None:
 
 
 def handle_gps_publish() -> None:
-    """Publish GPS location if LTE is connected and GPS enabled."""
-    global last_gps_publish
+    """Publish GPS location. Polls GPS directly (single-threaded UART)."""
+    global last_gps_publish, _last_gps_fix
 
     if not LTE_AVAILABLE or not ENABLE_GPS:
         return
 
     now = time.ticks_ms()
     if time.ticks_diff(now, last_gps_publish) >= gps_update_interval_ms:
-        gps = get_gps_cached()
-        if gps:
-            mqtt_publish(TOPIC_GPS_LATITUDE, str(gps.get("latitude", 0)))
-            mqtt_publish(TOPIC_GPS_LONGITUDE, str(gps.get("longitude", 0)))
-            mqtt_publish(TOPIC_GPS_ALTITUDE, str(gps.get("altitude", 0)))
-            mqtt_publish(TOPIC_GPS_SPEED, str(gps.get("speed", 0)))
-            mqtt_publish(TOPIC_GPS_SATELLITES, str(gps.get("satellites", 0)))
-            hdop = gps.get("hdop", 0)
-            vdop = gps.get("vdop", 0)
+        # Poll GPS directly (non-blocking when fix exists, ~2s max otherwise)
+        gps = get_gps_location(timeout_ms=5000)
+
+        # Cache last valid fix so we can republish even if GPS temporarily loses signal
+        if gps and gps.get("latitude", 0) != 0 and gps.get("longitude", 0) != 0:
+            _last_gps_fix = gps
+
+        # Publish from latest known fix
+        data = _last_gps_fix
+        if data:
+            mqtt_publish(TOPIC_GPS_LATITUDE, str(data.get("latitude", 0)))
+            mqtt_publish(TOPIC_GPS_LONGITUDE, str(data.get("longitude", 0)))
+            mqtt_publish(TOPIC_GPS_ALTITUDE, str(data.get("altitude", 0)))
+            mqtt_publish(TOPIC_GPS_SPEED, str(data.get("speed", 0)))
+            mqtt_publish(TOPIC_GPS_SATELLITES, str(data.get("satellites", 0)))
+            hdop = data.get("hdop", 0)
+            vdop = data.get("vdop", 0)
             mqtt_publish(TOPIC_GPS_HDOP, str(round(hdop * 5, 1)))
             mqtt_publish(TOPIC_GPS_VDOP, str(round(vdop * 5, 1)))
-            mqtt_publish(TOPIC_GPS_COURSE, str(gps.get("course", 0)))
+            mqtt_publish(TOPIC_GPS_COURSE, str(data.get("course", 0)))
         last_gps_publish = now
 
 
@@ -715,10 +723,6 @@ def main() -> None:
     blink_pattern("11011")
 
     disconnect_mqtt()
-
-    # Start background GPS polling if LTE is available
-    if LTE_AVAILABLE and ENABLE_GPS:
-        start_gps_polling(interval_s=5)
 
     reconnect_count = 0
 

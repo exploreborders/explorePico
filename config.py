@@ -130,7 +130,7 @@ LTE_CONNECT_TIMEOUT_MS = 90000
 
 # GPS Configuration
 ENABLE_GPS = True
-GPS_UPDATE_INTERVAL_MS = 1000  # 1 second
+GPS_UPDATE_INTERVAL_MS = 5000  # 5 seconds (direct polling, no background thread)
 
 # Signal & Network Update Intervals
 SIGNAL_UPDATE_INTERVAL_MS = 10000  # 10 seconds
