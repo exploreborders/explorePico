@@ -32,7 +32,6 @@ Usage:
 """
 
 import time
-import machine
 from machine import UART, Pin
 
 
@@ -608,10 +607,10 @@ class SIM7600:
     # GPS Functions
     # -------------------------------------------------------------------------
     def enable_gps(self) -> bool:
-        """Enable GPS with antenna power (for active antennas).
+        """Enable GPS with antenna power (CGNS stack only).
 
-        Enables CVAUX antenna power supply before starting GPS engine.
-        Required for active antennas with amplifier (e.g., ceramic GPS antennas).
+        Enables CGNS engine for continuous positioning.
+        Use sync_time_from_gps() separately for time sync.
 
         Returns:
             True if successful
@@ -619,68 +618,42 @@ class SIM7600:
         if self.gps_enabled:
             return True
 
-        # Enable antenna power supply (CVAUX pin)
         self.send_at("AT+CVAUXS=1", timeout=3000)
         self._log("GPS antenna power enabled")
 
-        # Set antenna voltage to 3.3V (active antennas typically need 2.7-5V)
         self.send_at("AT+CVAUXV=3300", timeout=3000)
         self._log("GPS antenna voltage set to 3.3V")
 
-        # Wait for antenna amplifier to stabilize
         time.sleep(1)
 
-        # Enable GPS engine (cold start)
-        response = self.send_at("AT+CGPS=1,1", timeout=5000)
-        if "OK" in response:
-            self.gps_enabled = True
-            self._log("GPS enabled")
-            return True
-        return False
+        self.send_at("AT+CGNSPWR=1", timeout=3000)
+        self._log("GPS CGNS engine powered on")
 
-    def get_gps_status(self) -> str:
-        """Get GPS session status.
+        resp = self.send_at("AT+CGNSSMODE=1,1,1,1", timeout=3000)
+        if "ERROR" in resp:
+            self.send_at("AT+CGNSSMODE=1,1", timeout=3000)
+            self._log("GPS GNSS mode: GPS+GLONASS")
+        else:
+            self._log("GPS GNSS mode: GPS+GLONASS+Galileo+BeiDou")
 
-        Returns:
-            GPS status string: "off", "standby", "active", or "unknown"
-        """
-        response = self.send_at("AT+CGPS?", timeout=3000)
-        self._log(f"GPS status: {response.strip()}")
-        # Response format: +CGPS: <status>
-        # 0 = off, 1 = standby, 2 = active
-        if "+CGPS: 0" in response:
-            return "off"
-        elif "+CGPS: 1" in response:
-            return "standby"
-        elif "+CGPS: 2" in response:
-            return "active"
-        return "unknown"
+        time.sleep(1.5)
 
-    def disable_gps(self) -> bool:
-        """Disable GPS and antenna power.
+        self.gps_enabled = True
+        self.gps_configured = True
+        self._log("GPS CGNS enabled")
+        return True
+
+    def get_gnss_info(self) -> dict | None:
+        """Get GPS data using AT+CGNSINFO (CGNS stack, full data).
 
         Returns:
-            True if successful
+            Dict with latitude, longitude, altitude, speed, course,
+            satellites, pdop, gps_svs, glonass_svs, beidou_svs or None.
         """
-        response = self.send_at("AT+CGPS=0", timeout=5000)
-        if "OK" in response:
-            self.gps_enabled = False
-            self.send_at("AT+CVAUXS=0", timeout=3000)
-            self._log("GPS disabled")
-            return True
-        return False
-
-    def get_gps_info(self) -> dict | None:
-        """Get GPS data using AT+CGNSSINFO=1.
-
-        Returns:
-            Dict with latitude, longitude, altitude, speed, satellites,
-            gps_svs, glonass_svs, beidou_svs, pdop, date, time or None.
-        """
-        response = self.send_at("AT+CGNSSINFO=1", timeout=3000)
+        response = self.send_at("AT+CGNSINFO", timeout=3000)
         self._log(f"GPS raw: {response}")
 
-        if "+CGNSSINFO:" not in response:
+        if "+CGNSINF:" not in response:
             return None
 
         data_start = response.rfind(":") + 1
@@ -692,37 +665,19 @@ class SIM7600:
         try:
             parts = data.split(",")
 
-            if len(parts) < 14:
+            run_status = parts[0].strip() if len(parts) > 0 else ""
+            fix_status = parts[1].strip() if len(parts) > 1 else ""
+
+            if run_status != "1" or fix_status != "1":
                 return None
 
-            lat_raw = parts[4].strip() if len(parts) > 4 and parts[4].strip() else ""
-            lat_dir = parts[5].strip() if len(parts) > 5 and parts[5].strip() else ""
-            lon_raw = parts[6].strip() if len(parts) > 6 and parts[6].strip() else ""
-            lon_dir = parts[7].strip() if len(parts) > 7 and parts[7].strip() else ""
+            lat_raw = parts[3].strip() if len(parts) > 3 else ""
+            lat_dir = parts[4].strip() if len(parts) > 4 else ""
+            lon_raw = parts[5].strip() if len(parts) > 5 else ""
+            lon_dir = parts[6].strip() if len(parts) > 6 else ""
 
-            if not lat_raw or not lon_raw:
+            if not lat_raw or not lon_dir:
                 return None
-
-            gps_svs = 0
-            if len(parts) > 1 and parts[1].strip():
-                try:
-                    gps_svs = int(parts[1].strip())
-                except ValueError:
-                    pass
-
-            glonass_svs = 0
-            if len(parts) > 2 and parts[2].strip():
-                try:
-                    glonass_svs = int(parts[2].strip())
-                except ValueError:
-                    pass
-
-            beidou_svs = 0
-            if len(parts) > 3 and parts[3].strip():
-                try:
-                    beidou_svs = int(parts[3].strip())
-                except ValueError:
-                    pass
 
             lat = self._convert_nmea_lat(lat_raw, lat_dir)
             lon = self._convert_nmea_lon(lon_raw, lon_dir)
@@ -731,16 +686,23 @@ class SIM7600:
                 return None
 
             alt = 0.0
-            if len(parts) > 10 and parts[10].strip():
+            if len(parts) > 7 and parts[7].strip():
                 try:
-                    alt = float(parts[10].strip())
+                    alt = float(parts[7].strip())
                 except ValueError:
                     pass
 
             speed = 0.0
-            if len(parts) > 11 and parts[11].strip():
+            if len(parts) > 8 and parts[8].strip():
                 try:
-                    speed = float(parts[11].strip())
+                    speed = float(parts[8].strip())
+                except ValueError:
+                    pass
+
+            course = 0.0
+            if len(parts) > 9 and parts[9].strip():
+                try:
+                    course = float(parts[9].strip())
                 except ValueError:
                     pass
 
@@ -751,10 +713,24 @@ class SIM7600:
                 except ValueError:
                     pass
 
-            course = 0.0
-            if len(parts) > 12 and parts[12].strip():
+            gps_svs = 0
+            if len(parts) > 14 and parts[14].strip():
                 try:
-                    course = float(parts[12].strip())
+                    gps_svs = int(parts[14].strip())
+                except ValueError:
+                    pass
+
+            glonass_svs = 0
+            if len(parts) > 15 and parts[15].strip():
+                try:
+                    glonass_svs = int(parts[15].strip())
+                except ValueError:
+                    pass
+
+            beidou_svs = 0
+            if len(parts) > 16 and parts[16].strip():
+                try:
+                    beidou_svs = int(parts[16].strip())
                 except ValueError:
                     pass
 
@@ -769,87 +745,6 @@ class SIM7600:
                 "gps_svs": gps_svs,
                 "glonass_svs": glonass_svs,
                 "beidou_svs": beidou_svs,
-                "date": parts[8].strip() if len(parts) > 8 else "",
-                "time": parts[9].strip() if len(parts) > 9 else "",
-            }
-
-        except Exception as e:
-            self._log(f"GPS parse error: {e}")
-            return None
-
-    def get_gps_cgpsinfo(self) -> dict | None:
-        """Get GPS data using AT+CGPSINFO (GPS-only, faster fix).
-
-        Response: <lat>,<lat_dir>,<lon>,<lon_dir>,<date>,<time>,<alt>,<speed>,<course>
-
-        Returns:
-            Dict with latitude, longitude, altitude, speed, course,
-            date, time or None if no fix. Satellites/DOP always 0.
-        """
-        response = self.send_at("AT+CGPSINFO", timeout=3000)
-        self._log(f"GPS raw: {response}")
-
-        if "+CGPSINFO:" not in response:
-            return None
-
-        data_start = response.rfind(":") + 1
-        data = response[data_start:].strip()
-
-        if not data:
-            return None
-
-        try:
-            parts = data.split(",")
-
-            if len(parts) < 9:
-                return None
-
-            lat_raw = parts[0].strip()
-            lat_dir = parts[1].strip()
-            lon_raw = parts[2].strip()
-            lon_dir = parts[3].strip()
-
-            if not lat_raw or not lon_raw:
-                return None
-
-            lat = self._convert_nmea_lat(lat_raw, lat_dir)
-            lon = self._convert_nmea_lon(lon_raw, lon_dir)
-
-            date_str = parts[4].strip() if len(parts) > 4 else ""
-            time_str = parts[5].strip() if len(parts) > 5 else ""
-
-            alt = 0.0
-            if parts[6].strip():
-                try:
-                    alt = float(parts[6].strip())
-                except ValueError:
-                    pass
-
-            speed = 0.0
-            if parts[7].strip():
-                try:
-                    speed = float(parts[7].strip())
-                except ValueError:
-                    pass
-
-            course = 0.0
-            if parts[8].strip():
-                try:
-                    course = float(parts[8].strip())
-                except ValueError:
-                    pass
-
-            return {
-                "latitude": lat,
-                "longitude": lon,
-                "altitude": alt,
-                "speed": speed,
-                "course": course,
-                "satellites": 0,
-                "hdop": 0.0,
-                "vdop": 0.0,
-                "date": date_str,
-                "time": time_str,
             }
 
         except Exception as e:
@@ -857,13 +752,13 @@ class SIM7600:
             return None
 
     def get_gps_location(self, timeout_ms: int = 5000) -> dict | None:
-        """Get GPS location using AT+CGPSINFO.
+        """Get GPS location using AT+CGNSINFO (CGNS stack).
 
         Args:
             timeout_ms: Maximum wait time for fix
 
         Returns:
-            Dict with lat, lon, alt, speed, satellites, or None
+            Dict with lat, lon, alt, speed, satellites, pdop or None
         """
         if not self.gps_enabled:
             self.enable_gps()
@@ -871,7 +766,7 @@ class SIM7600:
         start = time.ticks_ms()
 
         while time.ticks_diff(time.ticks_ms(), start) < timeout_ms:
-            result = self.get_gps_cgpsinfo()
+            result = self.get_gnss_info()
 
             if result:
                 lat = result.get("latitude", 0)
@@ -880,17 +775,7 @@ class SIM7600:
                 if lat != 0 and lon != 0:
                     return result
 
-            # Fall back to CGNSSINFO for satellite counts and PDOP
-            gnss_result = self.get_gps_info()
-
-            if gnss_result:
-                lat = gnss_result.get("latitude", 0)
-                lon = gnss_result.get("longitude", 0)
-
-                if lat != 0 and lon != 0:
-                    return gnss_result
-
-            time.sleep(1)
+            time.sleep(0.5)
 
         return None
 
@@ -947,136 +832,43 @@ class SIM7600:
     # -------------------------------------------------------------------------
     # Time Functions
     # -------------------------------------------------------------------------
-    def get_network_time(self) -> str | None:
-        """Get network time from SIM7600.
+    def sync_time_from_network(self) -> bool:
+        """Sync Pico system time from NTP.
 
         Returns:
-            ISO format time string or None
+            True if time was synced
         """
-        response = self.send_at("AT+CCLK?")
+        try:
+            import ntptime
+            import machine
 
-        if "+CCLK:" in response:
-            try:
-                start = response.find('"') + 1
-                end = response.find('"', start)
-                if start > 0 and end > start:
-                    return response[start:end]
-            except (ValueError, IndexError):
-                pass
+            ntptime.host = "pool.ntp.org"
+            ntptime.settime()
+            rtc = machine.RTC()
+            dt = rtc.datetime()
+            self._log(
+                f"NTP synced: {dt[0]}-{dt[1]:02d}-{dt[2]:02d} {dt[4]:02d}:{dt[5]:02d}:{dt[6]:02d}"
+            )
+            return True
+        except Exception as e:
+            self._log(f"NTP sync failed: {e}")
+            return False
 
-        return None
-
-    def get_gps_time(self) -> str | None:
-        """Get GPS time from NMEA.
-
-        Returns:
-            ISO format time string or None
-        """
-        gps = self.get_gps_cgpsinfo()
-
-        if gps and gps.get("time") and gps.get("date"):
-            try:
-                time_str = gps["time"]
-                date_str = gps["date"]
-
-                hour = int(time_str[:2])
-                minute = int(time_str[2:4])
-                second = int(time_str[4:6])
-                day = int(date_str[:2])
-                month = int(date_str[2:4])
-                year = int(date_str[4:6]) + 2000
-
-                return f"{year:04d}-{month:02d}-{day:02d}T{hour:02d}:{minute:02d}:{second:02d}"
-            except (ValueError, IndexError, TypeError):
-                pass
-
-        return None
-
-    def sync_time_from_gps(self, timeout_ms: int = 60000) -> bool:
-        """Sync Pico system time from GPS.
+    def sync_time_from_gps(self, timeout_ms: int = 30000) -> bool:
+        """Sync Pico system time from NTP.
 
         Args:
-            timeout_ms: Maximum wait time for GPS fix
+            timeout_ms: Maximum sync time (used for NTP timeout)
 
         Returns:
             True if time was synced
         """
-        self._log("Syncing time from GPS...")
+        self._log("Syncing time...")
 
-        if not self.gps_enabled:
-            self.enable_gps()
+        if self.sync_time_from_network():
+            return True
 
-        start = time.ticks_ms()
-
-        while time.ticks_diff(time.ticks_ms(), start) < timeout_ms:
-            gps = self.get_gps_cgpsinfo()
-
-            if gps and gps.get("time") and gps.get("date"):
-                try:
-                    time_str = gps["time"]
-                    date_str = gps["date"]
-
-                    self._log(f"GPS date: {date_str}, time: {time_str}")
-
-                    hour = int(time_str[:2])
-                    minute = int(time_str[2:4])
-                    second = int(time_str[4:6])
-                    day = int(date_str[:2])
-                    month = int(date_str[2:4])
-                    year = int(date_str[4:6]) + 2000
-
-                    rtc = machine.RTC()
-                    rtc.datetime((year, month, day, 0, hour, minute, second, 0))
-
-                    self._log(
-                        f"GPS time synced: {year}-{month:02d}-{day:02d} {hour:02d}:{minute:02d}:{second:02d}"
-                    )
-                    return True
-
-                except Exception as e:
-                    self._log(f"GPS time sync error: {e}")
-
-            time.sleep(2)
-
-        self._log(f"GPS time sync timeout after {timeout_ms}ms")
-        self._log("GPS time sync failed, skipping time sync")
-        return False
-
-    def sync_time_from_network(self) -> bool:
-        """Sync Pico system time from network.
-
-        Returns:
-            True if time was synced
-        """
-        net_time = self.get_network_time()
-
-        if net_time:
-            self._log(f"Raw network time: {net_time}")
-            try:
-                date_time = net_time.split(",")[0]
-                time_part = net_time.split(",")[1].split("+")[0].strip()
-
-                date_parts = date_time.split("/")
-                year = int(date_parts[0]) + 2000
-                month = int(date_parts[1])
-                day = int(date_parts[2])
-
-                time_parts = time_part.split(":")
-                hour = int(time_parts[0])
-                minute = int(time_parts[1])
-                second = int(time_parts[2])
-
-                rtc = machine.RTC()
-                rtc.datetime((year, month, day, 0, hour, minute, second, 0))
-
-                self._log(
-                    f"Network time synced: {year}-{month:02d}-{day:02d} {hour:02d}:{minute:02d}:{second:02d}"
-                )
-                return True
-
-            except Exception as e:
-                self._log(f"Network time sync error: {e}, raw: {net_time}")
-
+        self._log("Time sync failed, continuing without")
         return False
 
 
@@ -1183,7 +975,7 @@ class SIM7600Manager:
         Returns:
             Dict with GPS data or None
         """
-        return self.sim.get_gps_info()
+        return self.sim.get_gnss_info()
 
     def sync_time(self) -> bool:
         """Sync time from GPS.
