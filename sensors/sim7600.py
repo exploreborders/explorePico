@@ -615,6 +615,9 @@ class SIM7600:
         Returns:
             True if successful
         """
+        if self.gps_enabled:
+            return True
+
         # Enable antenna power supply (CVAUX pin)
         self.send_at("AT+CVAUXS=1", timeout=3000)
         self._log("GPS antenna power enabled")
