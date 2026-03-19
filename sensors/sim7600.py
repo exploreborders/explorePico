@@ -637,6 +637,24 @@ class SIM7600:
             return True
         return False
 
+    def get_gps_status(self) -> str:
+        """Get GPS session status.
+
+        Returns:
+            GPS status string: "off", "standby", "active", or "unknown"
+        """
+        response = self.send_at("AT+CGPS?", timeout=3000)
+        self._log(f"GPS status: {response.strip()}")
+        # Response format: +CGPS: <status>
+        # 0 = off, 1 = standby, 2 = active
+        if "+CGPS: 0" in response:
+            return "off"
+        elif "+CGPS: 1" in response:
+            return "standby"
+        elif "+CGPS: 2" in response:
+            return "active"
+        return "unknown"
+
     def disable_gps(self) -> bool:
         """Disable GPS and antenna power.
 
@@ -844,11 +862,8 @@ class SIM7600:
             self._log(f"GPS parse error: {e}")
             return None
 
-    def get_gps_location(self, timeout_ms: int = 30000) -> dict | None:
-        """Get GPS location, waiting for fix.
-
-        Tries CGPSINFO first (GPS-only, faster fix), falls back to
-        CGNSSINFO (multi-constellation, more satellites).
+    def get_gps_location(self, timeout_ms: int = 5000) -> dict | None:
+        """Get GPS location using AT+CGPSINFO.
 
         Args:
             timeout_ms: Maximum wait time for fix
@@ -860,10 +875,8 @@ class SIM7600:
             self.enable_gps()
 
         start = time.ticks_ms()
-        last_result = None
 
         while time.ticks_diff(time.ticks_ms(), start) < timeout_ms:
-            # Try CGPSINFO first (GPS-only, faster)
             result = self.get_gps_cgpsinfo()
 
             if result:
@@ -873,21 +886,9 @@ class SIM7600:
                 if lat != 0 and lon != 0:
                     return result
 
-            # Fall back to CGNSSINFO for multi-constellation data
-            if not result:
-                result = self.get_gps_info()
+            time.sleep(1)
 
-                if result:
-                    lat = result.get("latitude", 0)
-                    lon = result.get("longitude", 0)
-
-                    if lat != 0 and lon != 0:
-                        return result
-
-            last_result = result
-            time.sleep(2)
-
-        return last_result
+        return None
 
     def _convert_nmea_lat(self, raw: str, direction: str) -> float:
         """Convert NMEA latitude to decimal degrees.
@@ -967,7 +968,7 @@ class SIM7600:
         Returns:
             ISO format time string or None
         """
-        gps = self.get_gps_info()
+        gps = self.get_gps_cgpsinfo()
 
         if gps and gps.get("time") and gps.get("date"):
             try:
@@ -1178,7 +1179,7 @@ class SIM7600Manager:
         Returns:
             Dict with GPS data or None
         """
-        return self.sim.get_gps_info()
+        return self.sim.get_gps_cgpsinfo()
 
     def sync_time(self) -> bool:
         """Sync time from GPS.
