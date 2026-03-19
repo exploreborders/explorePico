@@ -5,7 +5,8 @@ High-level LTE connection functions using SIM7600G-H module.
 Provides time sync, GPS, signal info, and network monitoring.
 
 Functions:
-    connect_lte(): Initialize and connect to LTE network
+    init_gps(): Initialize SIM7600 for GPS (no LTE connection)
+    connect_lte(): Connect to LTE network
     is_lte_connected(): Check if LTE is connected
     get_gps_location(): Get GPS coordinates
     get_signal_info(): Get signal quality
@@ -13,8 +14,9 @@ Functions:
     sync_time(): Sync system time from GPS
 
 Usage:
-    from lte_utils import connect_lte, is_lte_connected
+    from lte_utils import init_gps, connect_lte, is_lte_connected
 
+    init_gps(uart_id=0, tx_pin=0, rx_pin=1)  # GPS works with any connection
     if connect_lte("internet", "5046"):
         print("LTE connected!")
 """
@@ -44,57 +46,72 @@ def _log(tag: str, message: str) -> None:
         print(f"[{tag}] {message}")
 
 
-def init_lte(
+def init_gps(
     uart_id: int = 0,
-    tx_pin: int = 1,
-    rx_pin: int = 0,
+    tx_pin: int = 0,
+    rx_pin: int = 1,
     baudrate: int = 115200,
-) -> SIM7600 | None:
-    """Initialize SIM7600 module.
+    sync_time: bool = True,
+) -> bool:
+    """Initialize SIM7600 for GPS only (no LTE connection).
+
+    Boots the SIM7600, enables GPS, and optionally syncs time.
+    Works with any network connection (WiFi or LTE).
+    Must be called before start_gps_polling().
 
     Args:
         uart_id: UART peripheral (0 or 1)
-        tx_pin: GPIO pin for TX
-        rx_pin: GPIO pin for RX
+        tx_pin: GPIO pin for TX (GP0)
+        rx_pin: GPIO pin for RX (GP1)
         baudrate: UART baudrate
+        sync_time: Sync time from GPS (recommended for TLS)
 
     Returns:
-        SIM7600 instance or None on failure
+        True if initialized successfully
     """
     global _lte_manager
+
+    _log("GPS", "Initializing SIM7600 for GPS...")
 
     sim = SIM7600(uart_id, tx_pin, rx_pin, baudrate)
     sim.set_logger(_log)
 
-    if sim.init():
-        return sim
+    if not sim.init():
+        _log("GPS", "SIM7600 init failed")
+        return False
 
-    return None
+    _lte_manager = SIM7600Manager(sim, "", "")
+    _lte_manager.set_logger(_log)
+
+    sim.enable_gps()
+
+    if sync_time:
+        if sim.sync_time_from_gps(timeout_ms=60000):
+            _log("GPS", "Time synced from GPS")
+        else:
+            _log("GPS", "Time sync failed, continuing without")
+
+    _log("GPS", "GPS initialized")
+    return True
 
 
 def connect_lte(
     apn: str,
     pin: str | None = None,
-    enable_gps: bool = True,
-    sync_time: bool = False,
     timeout_ms: int = 90000,
     uart_id: int = 0,
-    tx_pin: int = 1,
-    rx_pin: int = 0,
+    tx_pin: int = 0,
+    rx_pin: int = 1,
     baudrate: int = 115200,
 ) -> bool:
-    """Connect to LTE network with optional GPS and time sync.
+    """Connect to LTE network.
 
-    This function:
-    1. Initializes SIM7600
-    2. Enables GPS and syncs time (critical for TLS!)
-    3. Connects to LTE network
+    If _lte_manager already exists (from init_gps), reuses it.
+    Otherwise boots the SIM7600 and connects to LTE.
 
     Args:
         apn: Access Point Name (e.g., "internet")
         pin: SIM PIN code (optional)
-        enable_gps: Enable GPS for location tracking
-        sync_time: Sync time from GPS (recommended for TLS)
         timeout_ms: Connection timeout in ms
         uart_id: UART peripheral
         tx_pin: TX GPIO pin
@@ -106,6 +123,18 @@ def connect_lte(
     """
     global _lte_manager
 
+    # Reuse existing SIM7600 if already initialized (e.g., via init_gps)
+    if _lte_manager and _lte_manager.sim:
+        sim = _lte_manager.sim
+        _log("LTE", f"Connecting to LTE (APN: {apn})...")
+        if sim.connect_lte(apn, pin, timeout_ms):
+            _lte_manager.apn = apn
+            _lte_manager.pin = pin
+            return True
+        _log("LTE", "LTE connection failed")
+        return False
+
+    # Fresh init
     _log("LTE", "Initializing SIM7600...")
 
     sim = SIM7600(uart_id, tx_pin, rx_pin, baudrate)
@@ -115,25 +144,14 @@ def connect_lte(
         _log("LTE", "SIM7600 init failed")
         return False
 
-    if sync_time:
-        sim.enable_gps()
-
-        if sim.sync_time_from_gps(timeout_ms=60000):
-            pass
-        else:
-            _log("LTE", "GPS time sync failed, skipping time sync")
+    _lte_manager = SIM7600Manager(sim, apn, pin)
+    _lte_manager.set_logger(_log)
 
     _log("LTE", f"Connecting to LTE (APN: {apn})...")
 
     if not sim.connect_lte(apn, pin, timeout_ms):
         _log("LTE", "LTE connection failed")
         return False
-
-    _lte_manager = SIM7600Manager(sim, apn, pin)
-    _lte_manager.set_logger(_log)
-
-    if enable_gps:
-        sim.enable_gps()
 
     return True
 
@@ -171,6 +189,28 @@ def get_gps_location(timeout_ms: int = 30000) -> dict | None:
         return None
 
     return _lte_manager.get_gps_location()
+
+
+def start_gps_polling(interval_s: int = 5) -> None:
+    """Start background GPS polling thread.
+
+    Args:
+        interval_s: Seconds between GPS reads
+    """
+    if _lte_manager:
+        _lte_manager.start_gps_polling(interval_s)
+
+
+def get_gps_cached() -> dict | None:
+    """Get last cached GPS data (non-blocking).
+
+    Returns:
+        Dict with GPS data or None if no fix yet
+    """
+    if not _lte_manager:
+        return None
+
+    return _lte_manager.get_gps_cached()
 
 
 def get_signal_info() -> dict:

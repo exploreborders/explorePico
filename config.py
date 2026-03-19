@@ -45,37 +45,26 @@ DEVICE_IDENTIFIER = "pico2w"
 # MQTT Topics
 TOPIC_LED_COMMAND = "homeassistant/pico/switch/led/set"
 TOPIC_LED_STATE = "homeassistant/pico/switch/led/state"
-TOPIC_LED_CONFIG = "homeassistant/pico/switch/led/config"
 
 TOPIC_TEMP_STATE = "homeassistant/pico/sensor/cpu_temp"
-TOPIC_TEMP_CONFIG = "homeassistant/pico/sensor/cpu_temp/config"
 
 TOPIC_ROOM_TEMP_STATE = "homeassistant/pico/sensor/room_temp"
-TOPIC_ROOM_TEMP_CONFIG = "homeassistant/pico/sensor/room_temp/config"
 
 TOPIC_WATER_TEMP_STATE = "homeassistant/pico/sensor/water_temp"
-TOPIC_WATER_TEMP_CONFIG = "homeassistant/pico/sensor/water_temp/config"
 
 # ACS37030 Current Sensors (5 sensors)
 TOPIC_CURRENT_1_STATE = "homeassistant/pico/sensor/current_1"
-TOPIC_CURRENT_1_CONFIG = "homeassistant/pico/sensor/current_1/config"
 TOPIC_CURRENT_2_STATE = "homeassistant/pico/sensor/current_2"
-TOPIC_CURRENT_2_CONFIG = "homeassistant/pico/sensor/current_2/config"
 TOPIC_CURRENT_3_STATE = "homeassistant/pico/sensor/current_3"
-TOPIC_CURRENT_3_CONFIG = "homeassistant/pico/sensor/current_3/config"
 TOPIC_CURRENT_4_STATE = "homeassistant/pico/sensor/current_4"
-TOPIC_CURRENT_4_CONFIG = "homeassistant/pico/sensor/current_4/config"
 TOPIC_CURRENT_5_STATE = "homeassistant/pico/sensor/current_5"
-TOPIC_CURRENT_5_CONFIG = "homeassistant/pico/sensor/current_5/config"
 
 # Device availability topic (for last-will and birth message)
 TOPIC_AVAILABILITY = "homeassistant/pico/availability"
 
 # Update Entity Topics (HA native update entity)
-# Discovery Topic: homeassistant/pico/update/pico_firmware/config
 TOPIC_UPDATE_STATE = "homeassistant/pico/update/state"
 TOPIC_UPDATE_CMD = "homeassistant/pico/update/cmd"
-TOPIC_UPDATE_CONFIG = "homeassistant/pico/update/pico_firmware/config"
 TOPIC_UPDATE_LATEST = "homeassistant/pico/update/latest_version"
 
 # DS18B20 Configuration
@@ -148,38 +137,27 @@ SIGNAL_UPDATE_INTERVAL_MS = 10000  # 10 seconds
 NETWORK_INFO_UPDATE_INTERVAL_MS = 300000
 
 # Connection Priority (try first, fallback second)
-PRIMARY_CONNECTION = "LTE"
-FALLBACK_CONNECTION = "WIFI"
+PRIMARY_CONNECTION = "WIFI"
+FALLBACK_CONNECTION = "LTE"
 WIFI_ENABLED_WHEN_LTE_UP = True
 
 # -----------------------------------------------------------------------------
 # LTE/GPS/Network MQTT Topics
 # -----------------------------------------------------------------------------
 TOPIC_CONNECTION_TYPE = "homeassistant/pico/sensor/connection_type"
-TOPIC_CONNECTION_CONFIG = "homeassistant/pico/sensor/connection_type/config"
 
 TOPIC_SIGNAL_RSSI = "homeassistant/pico/sensor/signal_rssi"
-TOPIC_SIGNAL_RSSI_CONFIG = "homeassistant/pico/sensor/signal_rssi/config"
 TOPIC_SIGNAL_QUALITY = "homeassistant/pico/sensor/signal_quality"
-TOPIC_SIGNAL_QUALITY_CONFIG = "homeassistant/pico/sensor/signal_quality/config"
 
 TOPIC_NETWORK_OPERATOR = "homeassistant/pico/sensor/network_operator"
-TOPIC_NETWORK_OPERATOR_CONFIG = "homeassistant/pico/sensor/network_operator/config"
 TOPIC_NETWORK_TYPE = "homeassistant/pico/sensor/network_type"
-TOPIC_NETWORK_TYPE_CONFIG = "homeassistant/pico/sensor/network_type/config"
 TOPIC_NETWORK_REGISTERED = "homeassistant/pico/sensor/network_registered"
-TOPIC_NETWORK_REGISTERED_CONFIG = "homeassistant/pico/sensor/network_registered/config"
 
 TOPIC_GPS_LATITUDE = "homeassistant/pico/sensor/gps_latitude"
-TOPIC_GPS_LATITUDE_CONFIG = "homeassistant/pico/sensor/gps_latitude/config"
 TOPIC_GPS_LONGITUDE = "homeassistant/pico/sensor/gps_longitude"
-TOPIC_GPS_LONGITUDE_CONFIG = "homeassistant/pico/sensor/gps_longitude/config"
 TOPIC_GPS_ALTITUDE = "homeassistant/pico/sensor/gps_altitude"
-TOPIC_GPS_ALTITUDE_CONFIG = "homeassistant/pico/sensor/gps_altitude/config"
 TOPIC_GPS_SPEED = "homeassistant/pico/sensor/gps_speed"
-TOPIC_GPS_SPEED_CONFIG = "homeassistant/pico/sensor/gps_speed/config"
 TOPIC_GPS_SATELLITES = "homeassistant/pico/sensor/gps_satellites"
-TOPIC_GPS_SATELLITES_CONFIG = "homeassistant/pico/sensor/gps_satellites/config"
 TOPIC_GPS_HDOP = "homeassistant/pico/sensor/gps_hdop_accuracy"
 TOPIC_GPS_VDOP = "homeassistant/pico/sensor/gps_vdop_accuracy"
 TOPIC_GPS_COURSE = "homeassistant/pico/sensor/gps_course"

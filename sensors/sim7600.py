@@ -32,6 +32,7 @@ Usage:
 """
 
 import time
+import _thread
 import machine
 from machine import UART, Pin
 
@@ -64,6 +65,10 @@ class SIM7600:
 
         self.gps_enabled = False
         self.lte_connected = False
+
+        self._gps_cache: dict | None = None
+        self._gps_lock = _thread.allocate_lock()
+        self._gps_thread_running = False
 
     def set_logger(self, logger) -> None:
         """Set custom logger function."""
@@ -640,6 +645,7 @@ class SIM7600:
             satellites, hdop, vdop, date, time or None if no fix
         """
         response = self.send_at("AT+CGNSSINFO=1", timeout=3000)
+        self._log(f"GPS raw: {response}")
 
         # Handle response format: +CGNSSINFO: GNSSINFO: x,... or +CGNSSINFO: x,...
         if "+CGNSSINFO:" not in response:
@@ -774,6 +780,48 @@ class SIM7600:
             time.sleep(2)
 
         return last_result
+
+    def _gps_poll_thread(self, interval_s: int) -> None:
+        """Background thread that polls GPS and caches the result.
+
+        Args:
+            interval_s: Seconds between GPS reads
+        """
+        while self._gps_thread_running:
+            try:
+                result = self.get_gps_location(timeout_ms=5000)
+                if result:
+                    with self._gps_lock:
+                        self._gps_cache = result
+            except Exception as e:
+                self._log(f"GPS poll error: {e}")
+            time.sleep(interval_s)
+
+    def start_gps_polling(self, interval_s: int = 5) -> None:
+        """Start background GPS polling thread.
+
+        Args:
+            interval_s: Seconds between GPS reads (default 5)
+        """
+        if self._gps_thread_running:
+            return
+        self._gps_thread_running = True
+        _thread.start_new_thread(self._gps_poll_thread, (interval_s,))
+        self._log(f"GPS polling started (every {interval_s}s)")
+
+    def stop_gps_polling(self) -> None:
+        """Stop background GPS polling thread."""
+        self._gps_thread_running = False
+        self._log("GPS polling stopped")
+
+    def get_gps_cached(self) -> dict | None:
+        """Get last cached GPS data (non-blocking, thread-safe).
+
+        Returns:
+            Dict with GPS data or None if no fix yet
+        """
+        with self._gps_lock:
+            return self._gps_cache
 
     def _convert_nmea_lat(self, raw: str, direction: str) -> float:
         """Convert NMEA latitude to decimal degrees.
@@ -1073,3 +1121,23 @@ class SIM7600Manager:
             True if synced
         """
         return self.sim.sync_time_from_gps()
+
+    def start_gps_polling(self, interval_s: int = 5) -> None:
+        """Start background GPS polling.
+
+        Args:
+            interval_s: Seconds between GPS reads
+        """
+        self.sim.start_gps_polling(interval_s)
+
+    def stop_gps_polling(self) -> None:
+        """Stop background GPS polling."""
+        self.sim.stop_gps_polling()
+
+    def get_gps_cached(self) -> dict | None:
+        """Get last cached GPS data (non-blocking).
+
+        Returns:
+            Dict with GPS data or None
+        """
+        return self.sim.get_gps_cached()

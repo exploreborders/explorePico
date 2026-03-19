@@ -83,8 +83,6 @@ def connect_lte() -> bool:
         if do_connect_lte(
             apn=LTE_APN,
             pin=LTE_SIM_PIN,
-            enable_gps=True,
-            sync_time=LTE_SYNC_TIME_ON_BOOT,
             timeout_ms=LTE_CONNECT_TIMEOUT_MS,
             uart_id=LTE_UART_ID,
             tx_pin=LTE_TX_PIN,
@@ -174,6 +172,21 @@ if not try_primary_connection():
 
 if CONNECTION_TYPE:
     log(f"Connected via: {CONNECTION_TYPE}")
+
+    # Initialize GPS (works with WiFi or LTE, uses SIM7600 hardware)
+    if LTE_ENABLED:
+        try:
+            from lte_utils import init_gps as do_init_gps
+
+            do_init_gps(
+                uart_id=LTE_UART_ID,
+                tx_pin=LTE_TX_PIN,
+                rx_pin=LTE_RX_PIN,
+                baudrate=LTE_BAUD,
+                sync_time=LTE_SYNC_TIME_ON_BOOT,
+            )
+        except Exception as e:
+            log(f"GPS init failed: {e}")
 
     if GITHUB_UPDATES_ENABLED:
         try:
