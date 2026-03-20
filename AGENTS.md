@@ -221,11 +221,11 @@ VIO         3V3               Voltage level (IMPORTANT!)
 - **Network Info**: Operator, type (4G/3G/2G), registration status
 - **GPS**: Latitude, longitude, altitude, speed
 - **GPS Interval**: Configurable from Home Assistant (topic: `homeassistant/pico/gps/set_interval`)
-- **Time Sync**: Automatically syncs Pico RTC from GPS on boot (critical for TLS!)
+- **Time Sync**: Automatically syncs Pico RTC from NTP on boot (critical for TLS!)
 
 ### SIM7600 Time Sync
-The SIM7600 syncs time from GPS before connecting to ensure valid timestamps for TLS:
+The SIM7600 syncs time from NTP before connecting to ensure valid timestamps for TLS:
 1. Enable GPS
-2. Wait for time fix
-3. Set Pico RTC
-4. Connect to LTE network
+2. Connect to network (WiFi or LTE)
+3. Sync Pico RTC via NTP (ntptime)
+4. Connect to MQTT broker

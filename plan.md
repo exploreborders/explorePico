@@ -249,29 +249,6 @@ GITHUB_TOKEN = "ghp_xxx"
 | "11011" | Update complete, rebooting |
 | "111" | Error |
 
-## Implementation History
-
-### v1.7 - HA Update Entity
-- Added native HA update entity with progress
-- Added GitHub webhook support
-- Added moving average buffer for current sensors
-- Config validation
-
-### v1.6 - GitHub WiFi Updater
-- Added GitHub OTA updates
-- Added backup/restore
-- Progress callback support
-
-### v1.5 - ACS37030 Migration
-- Migrated from ISNS20 to ACS37030
-- Added ADS1115 I2C ADC driver
-- Added 5 current sensor support
-
-### v1.0-1.4 - Initial Development
-- DS18B20 temperature sensors
-- MQTT discovery
-- LED control
-- Basic update functionality
 
 ## Testing Checklist
 

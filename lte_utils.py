@@ -11,7 +11,7 @@ Functions:
     get_gps_location(): Get GPS coordinates
     get_signal_info(): Get signal quality
     get_network_info(): Get network information
-    sync_time(): Sync system time from GPS
+    sync_time(): Sync system time from NTP
 
 Usage:
     from lte_utils import init_gps, connect_lte, is_lte_connected
@@ -52,19 +52,18 @@ def init_gps(
     tx_pin: int = 0,
     rx_pin: int = 1,
     baudrate: int = 115200,
-    sync_time: bool = True,
 ) -> bool:
     """Initialize SIM7600 for GPS only (no LTE connection).
 
-    Boots the SIM7600, enables GPS, and optionally syncs time.
+    Boots the SIM7600 and enables GPS.
     Works with any network connection (WiFi or LTE).
+    Time sync (NTP) is handled separately in app.py after MQTT connects.
 
     Args:
         uart_id: UART peripheral (0 or 1)
         tx_pin: GPIO pin for TX (GP0)
         rx_pin: GPIO pin for RX (GP1)
         baudrate: UART baudrate
-        sync_time: Sync time from GPS (recommended for TLS)
 
     Returns:
         True if initialized successfully
@@ -84,12 +83,6 @@ def init_gps(
     _lte_manager.set_logger(_log)
 
     sim.enable_gps()
-
-    if sync_time:
-        if sim.sync_time_from_gps(timeout_ms=60000):
-            _log("GPS", "Time synced from GPS")
-        else:
-            _log("GPS", "Time sync failed, continuing without")
 
     _log("GPS", "GPS initialized")
     return True
@@ -220,7 +213,7 @@ def get_network_info() -> dict:
 
 
 def sync_time() -> bool:
-    """Sync system time from GPS.
+    """Sync system time from NTP.
 
     Returns:
         True if synced

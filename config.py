@@ -125,7 +125,7 @@ LTE_RX_PIN = 1  # GP1 → SIM7600 TXD
 LTE_BAUD = 115200  # Default baud rate
 LTE_APN = "internet"  # O2 APN
 LTE_SIM_PIN = "5046"  # O2 SIM PIN
-LTE_SYNC_TIME_ON_BOOT = True
+
 LTE_CONNECT_TIMEOUT_MS = 90000
 
 # GPS Configuration

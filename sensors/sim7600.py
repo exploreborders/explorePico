@@ -9,7 +9,7 @@ Hardware:
 Features:
     - LTE network connection (4G/3G/2G)
     - GPS positioning (GPS/GLONASS/BeiDou/Galileo)
-    - Time sync from GPS
+    - Time sync from NTP
     - Signal quality monitoring
     - Network information
 
@@ -610,7 +610,7 @@ class SIM7600:
         """Enable GPS with antenna power (CGNS stack only).
 
         Enables CGNS engine for continuous positioning.
-        Use sync_time_from_gps() separately for time sync.
+        Use sync_time_from_network() for time sync.
 
         Returns:
             True if successful
@@ -854,24 +854,6 @@ class SIM7600:
             self._log(f"NTP sync failed: {e}")
             return False
 
-    def sync_time_from_gps(self, timeout_ms: int = 30000) -> bool:
-        """Sync Pico system time from NTP.
-
-        Args:
-            timeout_ms: Maximum sync time (used for NTP timeout)
-
-        Returns:
-            True if time was synced
-        """
-        self._log("Syncing time...")
-
-        if self.sync_time_from_network():
-            return True
-
-        self._log("Time sync failed, continuing without")
-        return False
-
-
 class SIM7600Manager:
     """Manager for SIM7600 with retry logic."""
 
@@ -978,9 +960,9 @@ class SIM7600Manager:
         return self.sim.get_gnss_info()
 
     def sync_time(self) -> bool:
-        """Sync time from GPS.
+        """Sync time from network (NTP).
 
         Returns:
             True if synced
         """
-        return self.sim.sync_time_from_gps()
+        return self.sim.sync_time_from_network()
