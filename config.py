@@ -86,7 +86,7 @@ ACS37030_ZERO_OFFSET = (
 )
 ACS37030_NUM_SENSORS = 5  # Number of ACS37030 sensors (max 5)
 ACS37030_PICO_ADC_PIN = 26  # GP26 for 5th sensor (ADC0)
-ENABLE_ACS37030_PICO_ADC = False  # Set to True when 5th sensor is physically connected
+ENABLE_ACS37030_PICO_ADC = True  # Set to True when 5th sensor is physically connected
 ACS37030_BUFFER_SIZE = (
     10  # Moving average buffer size (higher = smoother but slower response)
 )
