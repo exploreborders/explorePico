@@ -629,12 +629,16 @@ class SIM7600:
         self.send_at("AT+CGNSPWR=1", timeout=3000)
         self._log("GPS CGNS engine powered on")
 
-        resp = self.send_at("AT+CGNSSMODE=1,1,1,1", timeout=3000)
+        resp = self.send_at("AT+CGNSSMODE=15,1", timeout=3000)
         if "ERROR" in resp:
             self.send_at("AT+CGNSSMODE=1,1", timeout=3000)
-            self._log("GPS GNSS mode: GPS+GLONASS")
+
+        mode_resp = self.send_at("AT+CGNSSMODE?", timeout=3000)
+        if "+CGNSSMODE:" in mode_resp:
+            mode_str = mode_resp.split("+CGNSSMODE:")[1].strip().split("\n")[0]
+            self._log(f"GPS GNSS mode: {mode_str}")
         else:
-            self._log("GPS GNSS mode: GPS+GLONASS+Galileo+BeiDou")
+            self._log("GPS GNSS mode: queried, no response")
 
         time.sleep(8)
 
