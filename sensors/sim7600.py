@@ -636,12 +636,35 @@ class SIM7600:
         else:
             self._log("GPS GNSS mode: GPS+GLONASS+Galileo+BeiDou")
 
-        time.sleep(1.5)
+        time.sleep(8)
 
         self.gps_enabled = True
         self.gps_configured = True
         self._log("GPS CGNS enabled")
         return True
+
+    def get_gps_fix_status(self) -> tuple[int, int]:
+        """Get GPS fix status using AT+CGNSFPS.
+
+        Returns:
+            Tuple of (fix_status, satellites)
+            - fix_status: 0=no fix, 1=fix acquired
+            - satellites: Number of satellites used
+        """
+        response = self.send_at("AT+CGNSFPS?", timeout=3000)
+
+        if "+CGNSFPS:" not in response:
+            return (0, 0)
+
+        try:
+            start = response.find("+CGNSFPS:") + 10
+            data = response[start:].strip()
+            parts = data.split(",")
+            fix = int(parts[0].strip())
+            sats = int(parts[1].strip()) if len(parts) > 1 else 0
+            return (fix, sats)
+        except (ValueError, IndexError):
+            return (0, 0)
 
     def get_gnss_info(self) -> dict | None:
         """Get GPS data using AT+CGNSINFO (CGNS stack, full data).
@@ -650,8 +673,13 @@ class SIM7600:
             Dict with latitude, longitude, altitude, speed, course,
             satellites, pdop, gps_svs, glonass_svs, beidou_svs or None.
         """
+        fix_status, satellites = self.get_gps_fix_status()
+        if fix_status == 0:
+            self._log(f"GPS: no fix ({satellites} sats)")
+        else:
+            self._log(f"GPS: fix acquired ({satellites} sats)")
+
         response = self.send_at("AT+CGNSINFO", timeout=3000)
-        self._log(f"GPS raw: {response}")
 
         if "+CGNSINF:" not in response:
             return None
@@ -854,6 +882,7 @@ class SIM7600:
             self._log(f"NTP sync failed: {e}")
             return False
 
+
 class SIM7600Manager:
     """Manager for SIM7600 with retry logic."""
 
@@ -958,6 +987,16 @@ class SIM7600Manager:
             Dict with GPS data or None
         """
         return self.sim.get_gnss_info()
+
+    def get_gps_fix_status(self) -> tuple[int, int]:
+        """Get GPS fix status.
+
+        Returns:
+            Tuple of (fix_status, satellites)
+            - fix_status: 0=no fix, 1=fix acquired
+            - satellites: Number of satellites used
+        """
+        return self.sim.get_gps_fix_status()
 
     def sync_time(self) -> bool:
         """Sync time from network (NTP).

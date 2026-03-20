@@ -172,20 +172,6 @@ if not try_primary_connection():
 if CONNECTION_TYPE:
     log(f"Connected via: {CONNECTION_TYPE}")
 
-    # Initialize GPS (works with WiFi or LTE, uses SIM7600 hardware)
-    if LTE_ENABLED:
-        try:
-            from lte_utils import init_gps as do_init_gps
-
-            do_init_gps(
-                uart_id=LTE_UART_ID,
-                tx_pin=LTE_TX_PIN,
-                rx_pin=LTE_RX_PIN,
-                baudrate=LTE_BAUD,
-            )
-        except Exception as e:
-            log(f"GPS init failed: {e}")
-
     if GITHUB_UPDATES_ENABLED:
         try:
             from github_updater import check_and_update

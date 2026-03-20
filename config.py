@@ -158,9 +158,10 @@ TOPIC_GPS_LONGITUDE = "homeassistant/pico/sensor/gps_longitude"
 TOPIC_GPS_ALTITUDE = "homeassistant/pico/sensor/gps_altitude"
 TOPIC_GPS_SPEED = "homeassistant/pico/sensor/gps_speed"
 TOPIC_GPS_SATELLITES = "homeassistant/pico/sensor/gps_satellites"
-TOPIC_GPS_HDOP = "homeassistant/pico/sensor/gps_hdop_accuracy"
-TOPIC_GPS_VDOP = "homeassistant/pico/sensor/gps_vdop_accuracy"
+TOPIC_GPS_PDOP = "homeassistant/pico/sensor/gps_pdop_accuracy"
 TOPIC_GPS_COURSE = "homeassistant/pico/sensor/gps_course"
+
+TOPIC_GPS_FIX_STATUS = "homeassistant/pico/sensor/gps_fix_status"
 
 TOPIC_GPS_INTERVAL_SET = "homeassistant/pico/gps/set_interval"
 

@@ -1,6 +1,6 @@
 # Pico 2W LTE Sensors for Home Assistant
 #
-# This package adds the following sensors from the SIM7600G-H LTE module:
+# This package adds the following sensors from the SIM7600G-H module:
 #   - Connection Type (LTE/WiFi/offline)
 #   - Signal RSSI (dBm)
 #   - Signal Quality (text)
@@ -11,8 +11,8 @@
 #   - GPS Altitude
 #   - GPS Speed
 #   - GPS Satellites
-#   - GPS HDOP Accuracy (meters)
-#   - GPS VDOP Accuracy (meters)
+#   - GPS Fix Status (0=no fix, 1=fix)
+#   - GPS PDOP Accuracy (meters, PDOP × 5)
 #   - GPS Course (Direction of movement)
 #   - CPU Temperature
 #   - Room Temperature
@@ -286,10 +286,23 @@ mqtt:
           - pico2w
         name: "Raspberry Pi Pico 2W"
 
-    # GPS PDOP Accuracy (meters) - derived from PDOP × 5
-    - name: "Pico GPS PDOP Accuracy"
-      unique_id: "pico_gps_hdop_accuracy"
-      state_topic: "homeassistant/pico/sensor/gps_hdop_accuracy"
+    # GPS Fix Status
+    - name: "Pico GPS Fix Status"
+      unique_id: "pico_gps_fix_status"
+      state_topic: "homeassistant/pico/sensor/gps_fix_status"
+      availability:
+        topic: "homeassistant/pico/availability"
+        payload_available: "online"
+        payload_not_available: "offline"
+      device:
+        identifiers:
+          - pico2w
+        name: "Raspberry Pi Pico 2W"
+
+    # GPS PDOP Accuracy (meters, PDOP × 5)
+    - name: "Pico GPS PDOP"
+      unique_id: "pico_gps_pdop"
+      state_topic: "homeassistant/pico/sensor/gps_pdop_accuracy"
       unit_of_measurement: "m"
       availability:
         topic: "homeassistant/pico/availability"

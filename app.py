@@ -56,8 +56,10 @@ try:
     from lte_utils import (
         is_lte_connected,
         get_gps_location,
+        get_gps_fix_status,
         get_signal_info,
         get_network_info,
+        init_gps,
     )
 
     LTE_AVAILABLE = True
@@ -129,9 +131,14 @@ from config import (
     TOPIC_GPS_ALTITUDE,
     TOPIC_GPS_SPEED,
     TOPIC_GPS_SATELLITES,
-    TOPIC_GPS_HDOP,
+    TOPIC_GPS_PDOP,
     TOPIC_GPS_COURSE,
     TOPIC_GPS_INTERVAL_SET,
+    TOPIC_GPS_FIX_STATUS,
+    LTE_UART_ID,
+    LTE_TX_PIN,
+    LTE_RX_PIN,
+    LTE_BAUD,
 )
 
 # -----------------------------------------------------------------------------
@@ -222,6 +229,7 @@ _last_gps_fix: dict | None = None
 last_signal_publish = 0
 last_network_publish = 0
 connection_type = "offline"
+_gps_available = False
 
 
 # -----------------------------------------------------------------------------
@@ -641,7 +649,7 @@ def handle_gps_publish() -> None:
     """Publish GPS location. Polls GPS directly (single-threaded UART)."""
     global last_gps_publish, _last_gps_fix
 
-    if not LTE_AVAILABLE or not ENABLE_GPS:
+    if not _gps_available or not ENABLE_GPS:
         return
 
     now = time.ticks_ms()
@@ -662,8 +670,10 @@ def handle_gps_publish() -> None:
             mqtt_publish(TOPIC_GPS_SPEED, str(data.get("speed", 0)))
             mqtt_publish(TOPIC_GPS_SATELLITES, str(data.get("satellites", 0)))
             pdop = data.get("pdop", 0)
-            mqtt_publish(TOPIC_GPS_HDOP, str(round(pdop * 5, 1)))
+            mqtt_publish(TOPIC_GPS_PDOP, str(round(pdop * 5, 1)))
             mqtt_publish(TOPIC_GPS_COURSE, str(data.get("course", 0)))
+            fix_status, _ = get_gps_fix_status()
+            mqtt_publish(TOPIC_GPS_FIX_STATUS, str(fix_status))
         last_gps_publish = now
 
 
@@ -711,7 +721,7 @@ def run_main_loop() -> None:
 # -----------------------------------------------------------------------------
 def main() -> None:
     """Main entry point."""
-    global last_sensor_publish, mqtt_client
+    global last_sensor_publish, mqtt_client, _gps_available
 
     validate_config()
 
@@ -733,6 +743,19 @@ def main() -> None:
             if not ensure_wifi():
                 time.sleep(RECONNECT_DELAY_S)
                 continue
+
+        # Initialize GPS if not already done (works with WiFi or LTE)
+        if LTE_AVAILABLE and not _gps_available:
+            try:
+                init_gps(
+                    uart_id=LTE_UART_ID,
+                    tx_pin=LTE_TX_PIN,
+                    rx_pin=LTE_RX_PIN,
+                    baudrate=LTE_BAUD,
+                )
+                _gps_available = True
+            except Exception as e:
+                log(f"GPS init failed: {e}")
 
         if mqtt_client is None:
             if not connect_mqtt():
