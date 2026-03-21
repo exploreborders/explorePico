@@ -2,14 +2,15 @@
 Raspberry Pi Pico 2W - Home Assistant MQTT Integration
 
 This is the main application that connects a Raspberry Pi Pico 2W to Home Assistant
-via MQTT. It reads temperature and current sensors and publishes the data to MQTT
-topics that Home Assistant automatically discovers.
+via MQTT. It reads temperature, current, and GPS sensors and publishes the data
+to MQTT topics. Sensor definitions are in the Home Assistant YAML package file.
 
 Features:
-    - MQTT integration with Home Assistant auto-discovery
+    - MQTT integration with Home Assistant (sensors defined in YAML package)
     - DS18B20 temperature sensor support (multiple sensors on single GPIO)
     - ACS37030 current sensor support (5 sensors via ADS1115 I2C)
     - Internal RP2350 temperature sensor
+    - SIM7600G-H LTE/GPS support (4G connection + GPS positioning)
     - OTA firmware updates via GitHub releases or SD card
     - LED control via MQTT
     - Device availability tracking (online/offline)
@@ -19,17 +20,15 @@ Hardware:
     - Raspberry Pi Pico 2W (RP2350)
     - DS18B20 temperature sensors on GPIO22 (configurable)
     - ACS37030LLZATR-020B3 current sensors (5x) via ADS1115 I2C + Pico ADC
+    - SIM7600G-H LTE module (UART GP0/GP1)
 
 Usage:
-    Upload all .py files to Pico and reset.
-    The device will:
-    1. Connect to WiFi
-    2. Check for firmware updates (GitHub or SD card)
-    3. Connect to MQTT broker
-    4. Publish auto-discovery configs to Home Assistant
-    5. Start publishing sensor data
-
-    Sensors will automatically appear in Home Assistant.
+    1. Copy homeassistant/pico2w_sensors.yaml to HA config/packages/
+    2. Add to HA configuration.yaml:
+       homeassistant:
+         packages: !include_dir_named packages
+    3. Upload all .py files to Pico and reset.
+    4. Restart Home Assistant.
 
 Environment:
     MicroPython for Raspberry Pi Pico 2W
@@ -57,9 +56,10 @@ try:
     from lte_utils import (
         is_lte_connected,
         get_gps_location,
+        get_gps_fix_status,
         get_signal_info,
         get_network_info,
-        sync_time,
+        init_gps,
     )
 
     LTE_AVAILABLE = True
@@ -95,7 +95,6 @@ from config import (
     RECONNECT_DELAY_S,
     TEMP_CONVERSION_TIME_MS,
     SENSOR_RETRY_INTERVAL_MS,
-    MQTT_DELAY_DISCOVERY,
     MQTT_DELAY_CONNECT,
     MQTT_DELAY_INITIAL_STATE,
     MQTT_LOOP_DELAY,
@@ -104,30 +103,18 @@ from config import (
     validate_config,
     TOPIC_LED_COMMAND,
     TOPIC_LED_STATE,
-    TOPIC_LED_CONFIG,
     TOPIC_TEMP_STATE,
-    TOPIC_TEMP_CONFIG,
     TOPIC_ROOM_TEMP_STATE,
-    TOPIC_ROOM_TEMP_CONFIG,
     TOPIC_WATER_TEMP_STATE,
-    TOPIC_WATER_TEMP_CONFIG,
     TOPIC_CURRENT_1_STATE,
-    TOPIC_CURRENT_1_CONFIG,
     TOPIC_CURRENT_2_STATE,
-    TOPIC_CURRENT_2_CONFIG,
     TOPIC_CURRENT_3_STATE,
-    TOPIC_CURRENT_3_CONFIG,
     TOPIC_CURRENT_4_STATE,
-    TOPIC_CURRENT_4_CONFIG,
     TOPIC_CURRENT_5_STATE,
-    TOPIC_CURRENT_5_CONFIG,
     TOPIC_UPDATE_CMD,
     TOPIC_UPDATE_STATE,
-    TOPIC_UPDATE_CONFIG,
     TOPIC_UPDATE_LATEST,
     TOPIC_AVAILABILITY,
-    DEVICE_NAME,
-    DEVICE_IDENTIFIER,
     INTERNAL_TEMP_ADC_PIN,
     ENABLE_GPS,
     GPS_UPDATE_INTERVAL_MS,
@@ -144,10 +131,14 @@ from config import (
     TOPIC_GPS_ALTITUDE,
     TOPIC_GPS_SPEED,
     TOPIC_GPS_SATELLITES,
-    TOPIC_GPS_HDOP,
-    TOPIC_GPS_VDOP,
+    TOPIC_GPS_PDOP,
     TOPIC_GPS_COURSE,
     TOPIC_GPS_INTERVAL_SET,
+    TOPIC_GPS_FIX_STATUS,
+    LTE_UART_ID,
+    LTE_TX_PIN,
+    LTE_RX_PIN,
+    LTE_BAUD,
 )
 
 # -----------------------------------------------------------------------------
@@ -234,10 +225,11 @@ _last_mqtt_values = {}
 # LTE/GPS state
 gps_update_interval_ms = GPS_UPDATE_INTERVAL_MS
 last_gps_publish = 0
+_last_gps_fix: dict | None = None
 last_signal_publish = 0
 last_network_publish = 0
 connection_type = "offline"
-time_synced = False  # Track if time has been synced from GPS
+_gps_available = False
 
 
 # -----------------------------------------------------------------------------
@@ -310,131 +302,6 @@ def ensure_wifi() -> bool:
 
 
 # -----------------------------------------------------------------------------
-# MQTT CONFIG GETTERS
-# -----------------------------------------------------------------------------
-def get_device_info() -> dict:
-    """Return device info for Home Assistant discovery."""
-    return {
-        "identifiers": [DEVICE_IDENTIFIER],
-        "name": DEVICE_NAME,
-    }
-
-
-def get_led_config() -> dict:
-    """Return LED switch config for Home Assistant discovery."""
-    return {
-        "name": "Pico LED",
-        "unique_id": "pico_led",
-        "command_topic": TOPIC_LED_COMMAND,
-        "state_topic": TOPIC_LED_STATE,
-        "payload_on": "ON",
-        "payload_off": "OFF",
-        "availability": {
-            "topic": TOPIC_AVAILABILITY,
-            "payload_available": "online",
-            "payload_not_available": "offline",
-        },
-        "device": get_device_info(),
-    }
-
-
-def get_temp_config() -> dict:
-    """Return temperature sensor config for Home Assistant discovery."""
-    return {
-        "name": "Pico Temperature",
-        "unique_id": "pico_temp",
-        "state_topic": TOPIC_TEMP_STATE,
-        "unit_of_measurement": "C",
-        "availability": {
-            "topic": TOPIC_AVAILABILITY,
-            "payload_available": "online",
-            "payload_not_available": "offline",
-        },
-        "device": get_device_info(),
-    }
-
-
-def get_room_temp_config() -> dict:
-    """Return room temperature sensor config for Home Assistant discovery."""
-    return {
-        "name": "Pico Room Temperature",
-        "unique_id": "pico_room_temp",
-        "state_topic": TOPIC_ROOM_TEMP_STATE,
-        "unit_of_measurement": "C",
-        "availability": {
-            "topic": TOPIC_AVAILABILITY,
-            "payload_available": "online",
-            "payload_not_available": "offline",
-        },
-        "device": get_device_info(),
-    }
-
-
-def get_water_temp_config() -> dict:
-    """Return water temperature sensor config for Home Assistant discovery."""
-    return {
-        "name": "Pico Water Temperature",
-        "unique_id": "pico_water_temp",
-        "state_topic": TOPIC_WATER_TEMP_STATE,
-        "unit_of_measurement": "C",
-        "availability": {
-            "topic": TOPIC_AVAILABILITY,
-            "payload_available": "online",
-            "payload_not_available": "offline",
-        },
-        "device": get_device_info(),
-    }
-
-
-# ACS37030 current sensor configs (5 sensors)
-CURRENT_TOPICS = [
-    (TOPIC_CURRENT_1_STATE, TOPIC_CURRENT_1_CONFIG, "Pico Current 1", "pico_current_1"),
-    (TOPIC_CURRENT_2_STATE, TOPIC_CURRENT_2_CONFIG, "Pico Current 2", "pico_current_2"),
-    (TOPIC_CURRENT_3_STATE, TOPIC_CURRENT_3_CONFIG, "Pico Current 3", "pico_current_3"),
-    (TOPIC_CURRENT_4_STATE, TOPIC_CURRENT_4_CONFIG, "Pico Current 4", "pico_current_4"),
-    (TOPIC_CURRENT_5_STATE, TOPIC_CURRENT_5_CONFIG, "Pico Current 5", "pico_current_5"),
-]
-
-
-def get_current_config(index: int) -> dict:
-    """Return current sensor config for Home Assistant discovery."""
-    state_topic, config_topic, name, unique_id = CURRENT_TOPICS[index]
-    return {
-        "name": name,
-        "unique_id": unique_id,
-        "state_topic": state_topic,
-        "unit_of_measurement": "A",
-        "device_class": "current",
-        "availability": {
-            "topic": TOPIC_AVAILABILITY,
-            "payload_available": "online",
-            "payload_not_available": "offline",
-        },
-        "device": get_device_info(),
-    }
-
-
-def get_update_entity_config() -> dict:
-    """Return update entity config for Home Assistant discovery."""
-    return {
-        "platform": "update",
-        "title": "Pico Firmware",
-        "name": "Pico Firmware",
-        "unique_id": "pico_firmware_update",
-        "state_topic": TOPIC_UPDATE_STATE,
-        "command_topic": TOPIC_UPDATE_CMD,
-        "payload_install": "PRESS",
-        "device_class": "firmware",
-        "availability": {
-            "topic": TOPIC_AVAILABILITY,
-            "payload_available": "online",
-            "payload_not_available": "offline",
-        },
-        "device": get_device_info(),
-    }
-
-
-# -----------------------------------------------------------------------------
 # REGISTRIES
 # -----------------------------------------------------------------------------
 SENSOR_REGISTRY = [
@@ -463,47 +330,25 @@ SENSOR_REGISTRY = [
 ]
 
 # Add ACS37030 current sensors
+CURRENT_STATE_TOPICS = [
+    TOPIC_CURRENT_1_STATE,
+    TOPIC_CURRENT_2_STATE,
+    TOPIC_CURRENT_3_STATE,
+    TOPIC_CURRENT_4_STATE,
+    TOPIC_CURRENT_5_STATE,
+]
+
 if ENABLE_ACS37030 and current_sensors:
     for i, sensor_manager in enumerate(current_sensors):
-        state_topic, config_topic, _, _ = CURRENT_TOPICS[i]
         SENSOR_REGISTRY.append(
             {
                 "name": f"current_{i + 1}",
                 "read_func": sensor_manager.read,
-                "state_topic": state_topic,
+                "state_topic": CURRENT_STATE_TOPICS[i],
                 "sensor_manager": sensor_manager,
                 "needs_unavailable": True,
             }
         )
-
-DISCOVERY_REGISTRY = [
-    (TOPIC_LED_CONFIG, get_led_config),
-    (TOPIC_TEMP_CONFIG, get_temp_config),
-    (TOPIC_ROOM_TEMP_CONFIG, get_room_temp_config),
-    (TOPIC_WATER_TEMP_CONFIG, get_water_temp_config),
-    (TOPIC_UPDATE_CONFIG, get_update_entity_config),
-]
-
-
-# Helper function for current sensor config (fixes lambda closure issue)
-def _make_current_config(idx):
-    """Factory function to create current config getter with bound index."""
-
-    def config():
-        return get_current_config(idx)
-
-    return config
-
-
-# Add ACS37030 current sensor discovery configs
-if ENABLE_ACS37030:
-    for i in range(len(current_sensors)):
-        _, config_topic, _, _ = CURRENT_TOPICS[i]
-        DISCOVERY_REGISTRY.append((config_topic, _make_current_config(i)))
-
-# Note: LTE/GPS sensors publish values but are NOT in auto-discovery
-# This reduces MQTT traffic over SSL/LTE to prevent disconnects (-104 error)
-# Connection type, signal, network, and GPS can be added manually in HA
 
 
 # -----------------------------------------------------------------------------
@@ -519,15 +364,6 @@ def publish_all_sensors() -> None:
             sensor_index=sensor.get("sensor_index"),
             needs_unavailable=sensor.get("needs_unavailable", False),
         )
-
-
-def publish_discovery() -> None:
-    """Publish Home Assistant MQTT discovery configs."""
-    for topic, config_func in DISCOVERY_REGISTRY:
-        payload = ujson.dumps(config_func())
-        log("MQTT", f"{config_func.__name__}: {len(payload)} bytes")
-        mqtt_client.publish(topic, payload, retain=True)
-        time.sleep(MQTT_DELAY_DISCOVERY)
 
 
 def publish_led_state() -> None:
@@ -707,9 +543,6 @@ def connect_mqtt() -> bool:
         mqtt_client.subscribe(TOPIC_GPS_INTERVAL_SET)
         log("MQTT", "Subscribed!")
 
-        # Skip auto-discovery - all sensors defined in yaml file
-        # This reduces MQTT traffic over LTE/SSL connection
-        time.sleep(2)  # Extra delay for SSL stability after discovery
         time.sleep(MQTT_DELAY_INITIAL_STATE)
         publish_led_state()
         time.sleep(0.5)
@@ -816,27 +649,34 @@ def handle_lte_network_publish() -> None:
 
 
 def handle_gps_publish() -> None:
-    """Publish GPS location if LTE is connected and GPS enabled."""
-    global last_gps_publish
+    """Publish GPS location. Polls GPS directly (single-threaded UART)."""
+    global last_gps_publish, _last_gps_fix
 
-    if not LTE_AVAILABLE or not is_lte_connected() or not ENABLE_GPS:
+    if not _gps_available or not ENABLE_GPS:
         return
 
     now = time.ticks_ms()
     if time.ticks_diff(now, last_gps_publish) >= gps_update_interval_ms:
-        gps = get_gps_location()
-        if gps:
-            mqtt_publish(TOPIC_GPS_LATITUDE, str(gps.get("latitude", 0)))
-            mqtt_publish(TOPIC_GPS_LONGITUDE, str(gps.get("longitude", 0)))
-            mqtt_publish(TOPIC_GPS_ALTITUDE, str(gps.get("altitude", 0)))
-            mqtt_publish(TOPIC_GPS_SPEED, str(gps.get("speed", 0)))
-            mqtt_publish(TOPIC_GPS_SATELLITES, str(gps.get("satellites", 0)))
-            # Convert DOP to accuracy in meters (DOP × 5m UERE)
-            hdop = gps.get("hdop", 0)
-            vdop = gps.get("vdop", 0)
-            mqtt_publish(TOPIC_GPS_HDOP, str(round(hdop * 5, 1)))
-            mqtt_publish(TOPIC_GPS_VDOP, str(round(vdop * 5, 1)))
-            mqtt_publish(TOPIC_GPS_COURSE, str(gps.get("course", 0)))
+        # Poll GPS directly (non-blocking when fix exists, ~2s max otherwise)
+        gps = get_gps_location(timeout_ms=5000)
+
+        # Cache last valid fix so we can republish even if GPS temporarily loses signal
+        if gps and gps.get("latitude", 0) != 0 and gps.get("longitude", 0) != 0:
+            _last_gps_fix = gps
+
+        # Publish from latest known fix
+        data = _last_gps_fix
+        if data:
+            mqtt_publish(TOPIC_GPS_LATITUDE, str(data.get("latitude", 0)))
+            mqtt_publish(TOPIC_GPS_LONGITUDE, str(data.get("longitude", 0)))
+            mqtt_publish(TOPIC_GPS_ALTITUDE, str(data.get("altitude", 0)))
+            mqtt_publish(TOPIC_GPS_SPEED, str(data.get("speed", 0)))
+            mqtt_publish(TOPIC_GPS_SATELLITES, str(data.get("satellites", 0)))
+            pdop = data.get("pdop", 0)
+            mqtt_publish(TOPIC_GPS_PDOP, str(round(pdop * 5, 1)))
+            mqtt_publish(TOPIC_GPS_COURSE, str(data.get("course", 0)))
+            fix_status, _ = get_gps_fix_status()
+            mqtt_publish(TOPIC_GPS_FIX_STATUS, str(fix_status))
         last_gps_publish = now
 
 
@@ -904,7 +744,7 @@ def try_time_sync() -> bool:
 
 def main() -> None:
     """Main entry point."""
-    global last_sensor_publish, mqtt_client, time_synced
+    global last_sensor_publish, mqtt_client, _gps_available
 
     validate_config()
 
@@ -949,6 +789,19 @@ def main() -> None:
             if not ensure_wifi():
                 time.sleep(RECONNECT_DELAY_S)
                 continue
+
+        # Initialize GPS if not already done (works with WiFi or LTE)
+        if LTE_AVAILABLE and not _gps_available:
+            try:
+                init_gps(
+                    uart_id=LTE_UART_ID,
+                    tx_pin=LTE_TX_PIN,
+                    rx_pin=LTE_RX_PIN,
+                    baudrate=LTE_BAUD,
+                )
+                _gps_available = True
+            except Exception as e:
+                log(f"GPS init failed: {e}")
 
         if mqtt_client is None:
             if not connect_mqtt():

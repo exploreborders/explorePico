@@ -6,7 +6,7 @@ and network connections before launching the main application.
 
 Connection Priority (configurable in config.py):
     1. LTE (SIM7600G-H) - Primary connection
-       - Syncs time from GPS on boot (critical for TLS!)
+       - Syncs time from NTP on boot
     2. WiFi (Pico W) - Fallback connection
 
 Update Priority:
@@ -48,7 +48,6 @@ try:
         LTE_TX_PIN,
         LTE_RX_PIN,
         LTE_BAUD,
-        LTE_SYNC_TIME_ON_BOOT,
         LTE_CONNECT_TIMEOUT_MS,
         PRIMARY_CONNECTION,
         FALLBACK_CONNECTION,
@@ -83,8 +82,6 @@ def connect_lte() -> bool:
         if do_connect_lte(
             apn=LTE_APN,
             pin=LTE_SIM_PIN,
-            enable_gps=True,
-            sync_time=LTE_SYNC_TIME_ON_BOOT,
             timeout_ms=LTE_CONNECT_TIMEOUT_MS,
             uart_id=LTE_UART_ID,
             tx_pin=LTE_TX_PIN,

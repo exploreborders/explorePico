@@ -45,37 +45,26 @@ DEVICE_IDENTIFIER = "pico2w"
 # MQTT Topics
 TOPIC_LED_COMMAND = "homeassistant/pico/switch/led/set"
 TOPIC_LED_STATE = "homeassistant/pico/switch/led/state"
-TOPIC_LED_CONFIG = "homeassistant/pico/switch/led/config"
 
 TOPIC_TEMP_STATE = "homeassistant/pico/sensor/cpu_temp"
-TOPIC_TEMP_CONFIG = "homeassistant/pico/sensor/cpu_temp/config"
 
 TOPIC_ROOM_TEMP_STATE = "homeassistant/pico/sensor/room_temp"
-TOPIC_ROOM_TEMP_CONFIG = "homeassistant/pico/sensor/room_temp/config"
 
 TOPIC_WATER_TEMP_STATE = "homeassistant/pico/sensor/water_temp"
-TOPIC_WATER_TEMP_CONFIG = "homeassistant/pico/sensor/water_temp/config"
 
 # ACS37030 Current Sensors (5 sensors)
 TOPIC_CURRENT_1_STATE = "homeassistant/pico/sensor/current_1"
-TOPIC_CURRENT_1_CONFIG = "homeassistant/pico/sensor/current_1/config"
 TOPIC_CURRENT_2_STATE = "homeassistant/pico/sensor/current_2"
-TOPIC_CURRENT_2_CONFIG = "homeassistant/pico/sensor/current_2/config"
 TOPIC_CURRENT_3_STATE = "homeassistant/pico/sensor/current_3"
-TOPIC_CURRENT_3_CONFIG = "homeassistant/pico/sensor/current_3/config"
 TOPIC_CURRENT_4_STATE = "homeassistant/pico/sensor/current_4"
-TOPIC_CURRENT_4_CONFIG = "homeassistant/pico/sensor/current_4/config"
 TOPIC_CURRENT_5_STATE = "homeassistant/pico/sensor/current_5"
-TOPIC_CURRENT_5_CONFIG = "homeassistant/pico/sensor/current_5/config"
 
 # Device availability topic (for last-will and birth message)
 TOPIC_AVAILABILITY = "homeassistant/pico/availability"
 
 # Update Entity Topics (HA native update entity)
-# Discovery Topic: homeassistant/pico/update/pico_firmware/config
 TOPIC_UPDATE_STATE = "homeassistant/pico/update/state"
 TOPIC_UPDATE_CMD = "homeassistant/pico/update/cmd"
-TOPIC_UPDATE_CONFIG = "homeassistant/pico/update/pico_firmware/config"
 TOPIC_UPDATE_LATEST = "homeassistant/pico/update/latest_version"
 
 # DS18B20 Configuration
@@ -97,7 +86,7 @@ ACS37030_ZERO_OFFSET = (
 )
 ACS37030_NUM_SENSORS = 5  # Number of ACS37030 sensors (max 5)
 ACS37030_PICO_ADC_PIN = 26  # GP26 for 5th sensor (ADC0)
-ENABLE_ACS37030_PICO_ADC = False  # Set to True when 5th sensor is physically connected
+ENABLE_ACS37030_PICO_ADC = True  # Set to True when 5th sensor is physically connected
 ACS37030_BUFFER_SIZE = (
     10  # Moving average buffer size (higher = smoother but slower response)
 )
@@ -136,22 +125,21 @@ LTE_RX_PIN = 1  # GP1 → SIM7600 TXD
 LTE_BAUD = 115200  # Default baud rate
 LTE_APN = "internet"  # O2 APN
 LTE_SIM_PIN = "5046"  # O2 SIM PIN
-LTE_SYNC_TIME_ON_BOOT = (
-    True  # Enable time sync (auto-detected in code based on MQTT_SSL)
-)
+
 LTE_CONNECT_TIMEOUT_MS = 90000
 
 # GPS Configuration
 ENABLE_GPS = True
-GPS_UPDATE_INTERVAL_MS = 1000  # 1 second
+GPS_UPDATE_INTERVAL_MS = 5000  # 5 seconds (direct polling, no background thread)
 
 # Signal & Network Update Intervals
 SIGNAL_UPDATE_INTERVAL_MS = 10000  # 10 seconds
 NETWORK_INFO_UPDATE_INTERVAL_MS = 300000
 
 # Connection Priority (try first, fallback second)
-PRIMARY_CONNECTION = "LTE"
-FALLBACK_CONNECTION = "WIFI"
+PRIMARY_CONNECTION = "WIFI"
+FALLBACK_CONNECTION = "LTE"
+WIFI_ENABLED_WHEN_LTE_UP = True
 
 # -----------------------------------------------------------------------------
 # LTE/GPS/Network MQTT Topics
@@ -170,9 +158,10 @@ TOPIC_GPS_LONGITUDE = "homeassistant/pico/sensor/gps_longitude"
 TOPIC_GPS_ALTITUDE = "homeassistant/pico/sensor/gps_altitude"
 TOPIC_GPS_SPEED = "homeassistant/pico/sensor/gps_speed"
 TOPIC_GPS_SATELLITES = "homeassistant/pico/sensor/gps_satellites"
-TOPIC_GPS_HDOP = "homeassistant/pico/sensor/gps_hdop_accuracy"
-TOPIC_GPS_VDOP = "homeassistant/pico/sensor/gps_vdop_accuracy"
+TOPIC_GPS_PDOP = "homeassistant/pico/sensor/gps_pdop_accuracy"
 TOPIC_GPS_COURSE = "homeassistant/pico/sensor/gps_course"
+
+TOPIC_GPS_FIX_STATUS = "homeassistant/pico/sensor/gps_fix_status"
 
 TOPIC_GPS_INTERVAL_SET = "homeassistant/pico/gps/set_interval"
 
