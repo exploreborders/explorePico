@@ -186,18 +186,19 @@ def get_lte_ip_address() -> str | None:
 
 
 def get_gps_location(timeout_ms: int = 2000) -> dict | None:
-    """Get GPS location (single poll, non-blocking when fix exists).
+    """Get GPS location (single poll, waits for fix up to timeout).
 
     Args:
         timeout_ms: Maximum wait time for fix (default 2s)
 
     Returns:
-        Dict with lat, lon, alt, speed, satellites or None
+        Dict with lat, lon, alt, speed, course, pdop, hdop, vdop,
+        satellites, source or None
     """
     if not _lte_manager:
         return None
 
-    return _lte_manager.get_gps_location()
+    return _lte_manager.get_gps_location(timeout_ms=timeout_ms)
 
 
 def get_gps_fix_status() -> tuple[int, int]:

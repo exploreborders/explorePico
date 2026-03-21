@@ -664,7 +664,7 @@ def handle_gps_publish() -> None:
 
     now = time.ticks_ms()
     if time.ticks_diff(now, last_gps_publish) >= gps_update_interval_ms:
-        # Poll GPS directly (non-blocking when fix exists, ~2s max otherwise)
+        # Poll GPS with timeout
         gps = get_gps_location(timeout_ms=5000)
 
         # Cache last valid fix so we can republish even if GPS temporarily loses signal
@@ -678,10 +678,11 @@ def handle_gps_publish() -> None:
             mqtt_publish(TOPIC_GPS_LONGITUDE, str(data.get("longitude", 0)))
             mqtt_publish(TOPIC_GPS_ALTITUDE, str(data.get("altitude", 0)))
             mqtt_publish(TOPIC_GPS_SPEED, str(data.get("speed", 0)))
+            mqtt_publish(TOPIC_GPS_COURSE, str(data.get("course", 0)))
             mqtt_publish(TOPIC_GPS_SATELLITES, str(data.get("satellites", 0)))
+            # PDOP * 5 = approximate accuracy in meters
             pdop = data.get("pdop", 0)
             mqtt_publish(TOPIC_GPS_PDOP, str(round(pdop * 5, 1)))
-            mqtt_publish(TOPIC_GPS_COURSE, str(data.get("course", 0)))
             fix_status, _ = get_gps_fix_status()
             mqtt_publish(TOPIC_GPS_FIX_STATUS, str(fix_status))
         last_gps_publish = now
@@ -815,18 +816,18 @@ def main() -> None:
                 continue
 
         # Initialize GPS if not already done
-        # If LTE is connected, SIM7600 is already initialized - just enable GPS
+        # If LTE is connected, use the existing SIM7600 from LTE manager
         # Otherwise, initialize fresh for GPS-only mode
         if LTE_AVAILABLE and not _gps_available:
             try:
-                if get_lte_manager and get_lte_manager():
-                    # LTE manager exists - SIM7600 already initialized
-                    # Just enable GPS on the existing module
-                    from sensors.sim7600 import SIM7600
-
-                    sim = SIM7600(LTE_UART_ID, LTE_TX_PIN, LTE_RX_PIN, LTE_BAUD)
+                manager = get_lte_manager()
+                if manager and manager.sim:
+                    # LTE manager exists - use its SIM7600 instance
+                    # This way gps_enabled state is preserved
+                    sim = manager.sim
                     sim.set_logger(lambda tag, msg: log(tag, msg))
-                    sim.enable_gps()
+                    if not sim.gps_enabled:
+                        sim.enable_gps()
                     _gps_available = True
                     log("GPS", "GPS enabled (reusing LTE module)")
                 else:
