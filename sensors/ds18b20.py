@@ -168,7 +168,8 @@ class DS18B20Manager:
                     self.last_retry = now
                     self.log_func(
                         self.name,
-                        f"Init failed! Retrying in {self.retry_interval_ms // 1000}s...",
+                        f"Init failed! Retrying in "
+                        f"{self.retry_interval_ms // 1000}s...",
                     )
                     return None
                 self.ever_connected = True

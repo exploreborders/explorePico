@@ -137,9 +137,9 @@ SIGNAL_UPDATE_INTERVAL_MS = 10000  # 10 seconds
 NETWORK_INFO_UPDATE_INTERVAL_MS = 300000
 
 # Connection Priority (try first, fallback second)
-PRIMARY_CONNECTION = "WIFI"
-FALLBACK_CONNECTION = "LTE"
-WIFI_ENABLED_WHEN_LTE_UP = True
+PRIMARY_CONNECTION = "LTE"
+FALLBACK_CONNECTION = "WIFI"
+WIFI_ENABLED_WHEN_LTE_UP = False
 
 # -----------------------------------------------------------------------------
 # LTE/GPS/Network MQTT Topics

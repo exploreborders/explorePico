@@ -47,7 +47,9 @@ def scan_and_connect(
     log_fn=None,
     blink_fn=None,
 ) -> bool:
-    """Scan for available networks and connect to first available. Returns True if connected.
+    """Scan for available networks and connect to first available.
+
+    Returns True if connected.
 
     Args:
         networks: List of (ssid, password) tuples to check

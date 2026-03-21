@@ -170,14 +170,6 @@ class SIM7600:
                 break
             time.sleep(1)
 
-        self._log("Enabling automatic GPS (AT+CGPSAUTO=1)...")
-        for _ in range(3):
-            resp = self._send_at_simple("AT+CGPSAUTO=1", timeout=2000)
-            if resp and "OK" in resp:
-                self._log("Automatic GPS enabled!")
-                break
-            time.sleep(0.5)
-
         self._log("SIM7600 initialized successfully!")
         return True
 
@@ -607,15 +599,6 @@ class SIM7600:
     # -------------------------------------------------------------------------
     # GPS Functions
     # -------------------------------------------------------------------------
-    def is_gps_auto_enabled(self) -> bool:
-        """Check if automatic GPS is enabled.
-
-        Returns:
-            True if automatic GPS is enabled
-        """
-        response = self.send_at("AT+CGPSAUTO?", timeout=2000)
-        return "+CGPSAUTO: 1" in response
-
     def enable_gps(self) -> bool:
         """Enable GPS with antenna power (CGNS stack only).
 
@@ -626,6 +609,7 @@ class SIM7600:
             True if successful
         """
         if self.gps_enabled:
+            self._log("GPS already enabled")
             return True
 
         self.send_at("AT+CVAUXS=1", timeout=3000)
@@ -639,23 +623,19 @@ class SIM7600:
         self.send_at("AT+CGNSPWR=1", timeout=3000)
         self._log("GPS CGNS engine powered on")
 
-        resp = self.send_at("AT+CGNSSMODE=15,1", timeout=3000)
-        if "ERROR" in resp:
-            self.send_at("AT+CGNSSMODE=1,1", timeout=3000)
+        # Check if auto GPS is already enabled
+        if self.gps_enabled:
+            self._log("GPS already enabled")
+            return True
 
-        mode_resp = self.send_at("AT+CGNSSMODE?", timeout=3000)
-        if "+CGNSSMODE:" in mode_resp:
-            mode_str = mode_resp.split("+CGNSSMODE:")[1].strip().split("\n")[0]
-            self._log(f"GPS GNSS mode: {mode_str}")
-        else:
-            self._log("GPS GNSS mode: queried, no response")
-
-        time.sleep(8)
-
-        self.gps_enabled = True
-        self.gps_configured = True
-        self._log("GPS CGNS enabled")
-        return True
+        response = self.send_at("AT+CGPS=1,1", timeout=5000)
+        if "OK" in response:
+            self.gps_enabled = True
+            self.gps_configured = True
+            self._log("GPS CGPS enabled")
+            self._log("GPS enabled")
+            return True
+        return False
 
     def get_gps_fix_status(self) -> tuple[int, int]:
         """Get GPS fix status using AT+CGNSFPS.
@@ -874,27 +854,25 @@ class SIM7600:
     # -------------------------------------------------------------------------
     # Time Functions
     # -------------------------------------------------------------------------
-    def sync_time_from_network(self) -> bool:
-        """Sync Pico system time from NTP.
+    def get_network_time(self) -> str | None:
+        """Get time from network registration (AT+CCLK).
+
+        Note: This returns the operator's network time string.
+        For system time sync, use sync_time() from lte_utils.py.
 
         Returns:
-            True if time was synced
+            Time string or None
         """
-        try:
-            import ntptime
-            import machine
-
-            ntptime.host = "pool.ntp.org"
-            ntptime.settime()
-            rtc = machine.RTC()
-            dt = rtc.datetime()
-            self._log(
-                f"NTP synced: {dt[0]}-{dt[1]:02d}-{dt[2]:02d} {dt[4]:02d}:{dt[5]:02d}:{dt[6]:02d}"
-            )
-            return True
-        except Exception as e:
-            self._log(f"NTP sync failed: {e}")
-            return False
+        response = self.send_at("AT+CCLK?", timeout=3000)
+        if "+CCLK:" in response:
+            try:
+                start = response.find("+CCLK:") + 8
+                end = response.find('"', start)
+                if end > start:
+                    return response[start:end]
+            except Exception:
+                pass
+        return None
 
 
 class SIM7600Manager:
@@ -1019,11 +997,3 @@ class SIM7600Manager:
             - satellites: Number of satellites used
         """
         return self.sim.get_gps_fix_status()
-
-    def sync_time(self) -> bool:
-        """Sync time from network (NTP).
-
-        Returns:
-            True if synced
-        """
-        return self.sim.sync_time_from_network()

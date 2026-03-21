@@ -2,7 +2,7 @@
 LTE Utilities for Pico 2W
 
 High-level LTE connection functions using SIM7600G-H module.
-Provides time sync, GPS, signal info, and network monitoring.
+Provides time sync (NTP), GPS, signal info, and network monitoring.
 
 Functions:
     init_gps(): Initialize SIM7600 for GPS (no LTE connection)
@@ -11,22 +11,27 @@ Functions:
     get_gps_location(): Get GPS coordinates
     get_signal_info(): Get signal quality
     get_network_info(): Get network information
-    sync_time(): Sync system time from NTP
+    sync_time(): Sync system time from NTP (MAIN ENTRY POINT)
 
 Usage:
-    from lte_utils import init_gps, connect_lte, is_lte_connected
+    from lte_utils import init_gps, connect_lte, is_lte_connected, sync_time
 
     init_gps(uart_id=0, tx_pin=0, rx_pin=1)  # GPS works with any connection
     if connect_lte("internet", "5046"):
         print("LTE connected!")
+    sync_time()  # Sync time via NTP
     location = get_gps_location()
 """
+
+import time as time_module
 
 from sensors.sim7600 import SIM7600, SIM7600Manager
 
 
 _lte_manager: SIM7600Manager | None = None
 _log_fn = None
+_time_synced = False
+_time_sync_source = None
 
 
 def set_logger(log_fn) -> None:
@@ -237,13 +242,42 @@ def get_network_info() -> dict:
     return _lte_manager.get_network_info()
 
 
-def sync_time_ntp() -> bool:
-    """Sync system time from NTP server (fast, internet-based).
+def sync_time(force: bool = False) -> bool:
+    """Sync system time from NTP server (MAIN ENTRY POINT).
+
+    This is the SINGLE public time sync function. Use this in your code.
+
+    Uses NTP via WiFi or LTE connection. NTP is fast (< 1 second)
+    and reliable when network is available.
+
+    Args:
+        force: Force sync even if already synced
 
     Returns:
         True if synced successfully
     """
-    if not is_lte_connected() and not is_wifi_connected():
+    global _time_synced, _time_sync_source
+
+    # Check if already synced
+    if _time_synced and not force:
+        _log("TIME", "Already synced (use force=True to resync)")
+        return True
+
+    # Try NTP via network (WiFi or LTE)
+    _log("TIME", "Syncing time via NTP...")
+    if _sync_time_ntp():
+        _time_synced = True
+        _time_sync_source = "NTP"
+        _log("TIME", "Time synced via NTP")
+        return True
+
+    _log("TIME", "NTP sync failed")
+    return False
+
+
+def _sync_time_ntp() -> bool:
+    """Internal NTP sync helper (private - use sync_time())."""
+    if not _is_network_available():
         _log("TIME", "No network connection for NTP sync")
         return False
 
@@ -253,17 +287,35 @@ def sync_time_ntp() -> bool:
         ntptime.host = "pool.ntp.org"
         ntptime.settime()
 
-        import time
-
-        now = time.localtime()
+        now = time_module.localtime()
         _log(
             "TIME",
-            f"NTP time synced: {now[0]}-{now[1]:02d}-{now[2]:02d} {now[3]:02d}:{now[4]:02d}:{now[5]:02d}",
+            f"NTP synced: {now[0]}-{now[1]:02d}-{now[2]:02d} "
+            f"{now[3]:02d}:{now[4]:02d}:{now[5]:02d}",
         )
         return True
     except Exception as e:
-        _log("TIME", f"NTP sync failed: {e}")
+        _log("TIME", f"NTP failed: {e}")
         return False
+
+
+def _is_network_available() -> bool:
+    """Check if any network is available (WiFi or LTE)."""
+    # Check WiFi
+    try:
+        import network
+
+        sta = network.WLAN(network.STA_IF)
+        if sta.isconnected():
+            return True
+    except OSError:
+        pass
+
+    # Check LTE
+    if _lte_manager and _lte_manager.is_connected():
+        return True
+
+    return False
 
 
 def is_wifi_connected() -> bool:
@@ -272,33 +324,19 @@ def is_wifi_connected() -> bool:
     Returns:
         True if WiFi is connected
     """
-    try:
-        import network
-
-        sta = network.WLAN(network.STA_IF)
-        return sta.isconnected()
-    except:
-        return False
+    return _is_network_available() and not is_lte_connected()
 
 
-def sync_time() -> bool:
-    """Sync system time from NTP.
+def is_time_synced() -> bool:
+    """Check if time has been synced."""
+    global _time_synced
+    return _time_synced
 
-    Returns:
-        True if synced via any method
-    """
-    # Try NTP first (fast, takes < 1 second)
-    _log("TIME", "Trying NTP sync (fast)...")
-    if sync_time_ntp():
-        return True
 
-    # Fall back to GPS if NTP fails
-    _log("TIME", "NTP failed, trying GPS...")
-    if not _lte_manager:
-        _log("TIME", "No LTE manager for GPS sync")
-        return False
-
-    return _lte_manager.sync_time()
+def get_time_sync_source() -> str | None:
+    """Get the source of last time sync (NTP or None)."""
+    global _time_sync_source
+    return _time_sync_source
 
 
 def reconnect_if_needed() -> bool:

@@ -60,11 +60,15 @@ try:
         get_signal_info,
         get_network_info,
         init_gps,
+        sync_time,
+        get_lte_manager,
     )
 
     LTE_AVAILABLE = True
 except Exception:
     LTE_AVAILABLE = False
+    sync_time = None
+    get_lte_manager = None
 
 from config import (
     WIFI_SSID,
@@ -230,6 +234,9 @@ last_signal_publish = 0
 last_network_publish = 0
 connection_type = "offline"
 _gps_available = False
+
+# Time sync state
+time_synced = False
 
 
 # -----------------------------------------------------------------------------
@@ -420,7 +427,7 @@ def update_version_received(latest: str) -> None:
 # -----------------------------------------------------------------------------
 def on_message(topic: bytes, msg: bytes) -> None:
     """Handle incoming MQTT messages."""
-    global led_state, update_state
+    global led_state, update_state, gps_update_interval_ms
 
     try:
         topic_str = topic.decode()
@@ -723,28 +730,42 @@ def run_main_loop() -> None:
 # ENTRY POINT
 # -----------------------------------------------------------------------------
 def try_time_sync() -> bool:
-    """Try to sync time from GPS. Returns True if successful."""
+    """Try to sync time via NTP.
+
+    Uses the unified sync_time() function from lte_utils which uses
+    NTP via WiFi or LTE connection.
+
+    Returns:
+        True if time was synced successfully
+    """
     global time_synced
+
     if time_synced:
         return True
 
-    if not LTE_AVAILABLE or not is_lte_connected():
-        return False
-
     try:
+        # Use the unified sync_time() from lte_utils
         if sync_time():
             time_synced = True
-            log("TIME", "Time synced successfully in main loop")
+            log("TIME", "Time synced successfully")
             return True
     except Exception as e:
-        log("TIME", f"Time sync retry error: {e}")
+        log("TIME", f"Time sync error: {e}")
 
     return False
 
 
 def main() -> None:
     """Main entry point."""
-    global last_sensor_publish, mqtt_client, _gps_available
+    global last_sensor_publish, mqtt_client, _gps_available, time_synced
+    global reconnect_count  # noqa: F821
+
+    # Import sync_time here to avoid circular imports
+    from lte_utils import sync_time as do_sync_time
+
+    # Create a local alias for convenience
+    def sync_time_wrapper() -> bool:
+        return do_sync_time()
 
     validate_config()
 
@@ -754,13 +775,14 @@ def main() -> None:
 
     disconnect_mqtt()
 
-    # Initial time sync attempt (will retry in main loop if fails)
+    # Time sync state
     time_synced = False
-
-    reconnect_count = 0
     time_sync_retry_count = 0
     last_time_sync_retry = 0
     TIME_SYNC_RETRY_INTERVAL_MS = 300000  # Retry every 5 minutes
+
+    # Track which sync function to use
+    time_sync_fn = sync_time_wrapper
 
     while True:
         # Check LTE first, only use WiFi as fallback
@@ -773,16 +795,18 @@ def main() -> None:
                     or time.ticks_diff(now, last_time_sync_retry)
                     >= TIME_SYNC_RETRY_INTERVAL_MS
                 ):
-                    log("TIME", "Attempting time sync in main loop...")
+                    log("TIME", "Attempting time sync...")
                     last_time_sync_retry = now
-                    if try_time_sync():
+
+                    if time_sync_fn():
                         time_synced = True
                         time_sync_retry_count = 0
                     else:
                         time_sync_retry_count += 1
                         log(
                             "TIME",
-                            f"Time sync failed (attempt {time_sync_retry_count}), will retry in {TIME_SYNC_RETRY_INTERVAL_MS / 1000}s",
+                            f"Time sync failed (attempt {time_sync_retry_count}), "
+                            f"will retry in {TIME_SYNC_RETRY_INTERVAL_MS // 1000}s",
                         )
         else:
             # LTE not connected, ensure WiFi
@@ -790,18 +814,32 @@ def main() -> None:
                 time.sleep(RECONNECT_DELAY_S)
                 continue
 
-        # Initialize GPS if not already done (works with WiFi or LTE)
+        # Initialize GPS if not already done
+        # If LTE is connected, SIM7600 is already initialized - just enable GPS
+        # Otherwise, initialize fresh for GPS-only mode
         if LTE_AVAILABLE and not _gps_available:
             try:
-                init_gps(
-                    uart_id=LTE_UART_ID,
-                    tx_pin=LTE_TX_PIN,
-                    rx_pin=LTE_RX_PIN,
-                    baudrate=LTE_BAUD,
-                )
-                _gps_available = True
+                if get_lte_manager and get_lte_manager():
+                    # LTE manager exists - SIM7600 already initialized
+                    # Just enable GPS on the existing module
+                    from sensors.sim7600 import SIM7600
+
+                    sim = SIM7600(LTE_UART_ID, LTE_TX_PIN, LTE_RX_PIN, LTE_BAUD)
+                    sim.set_logger(lambda tag, msg: log(tag, msg))
+                    sim.enable_gps()
+                    _gps_available = True
+                    log("GPS", "GPS enabled (reusing LTE module)")
+                else:
+                    # No LTE manager - initialize fresh (WiFi-only mode)
+                    init_gps(
+                        uart_id=LTE_UART_ID,
+                        tx_pin=LTE_TX_PIN,
+                        rx_pin=LTE_RX_PIN,
+                        baudrate=LTE_BAUD,
+                    )
+                    _gps_available = True
             except Exception as e:
-                log(f"GPS init failed: {e}")
+                log("GPS", f"Init failed: {e}")
 
         if mqtt_client is None:
             if not connect_mqtt():

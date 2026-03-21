@@ -37,6 +37,14 @@ from wifi_utils import scan_and_connect
 from updater_utils import log, detect_rollback_trigger, perform_rollback
 
 try:
+    from lte_utils import sync_time
+
+    LTE_AVAILABLE = True
+except Exception:
+    LTE_AVAILABLE = False
+    sync_time = None
+
+try:
     from config import (
         GITHUB_OWNER,
         GITHUB_REPO,
@@ -171,6 +179,14 @@ if not try_primary_connection():
 
 if CONNECTION_TYPE:
     log(f"Connected via: {CONNECTION_TYPE}")
+
+    # Sync time immediately after connection
+    if sync_time:
+        log("TIME", "Syncing time after connection...")
+        if sync_time():
+            log("TIME", "Time synced successfully")
+        else:
+            log("TIME", "Time sync failed (will retry in app)")
 
     if GITHUB_UPDATES_ENABLED:
         try:

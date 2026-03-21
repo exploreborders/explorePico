@@ -222,9 +222,8 @@ class ACS37030Manager:
             if auto_calibrate:
                 self._log("Calibrating zero point...")
                 measured = self.sensor.calibrate_zero(samples=10)
-                self._log(
-                    f"Zero point: {measured:.3f}V (offset: {self.sensor.zero_point_offset:.3f}V)"
-                )
+                offset = self.sensor.zero_point_offset
+                self._log(f"Zero point: {measured:.3f}V (offset: {offset:.3f}V)")
 
             return True
 
