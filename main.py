@@ -54,7 +54,7 @@ try:
         FALLBACK_CONNECTION,
     )
 
-    GITHUB_UPDATES_ENABLED = True
+    GITHUB_UPDATES_ENABLED = False
 except Exception:
     GITHUB_UPDATES_ENABLED = False
     LTE_ENABLED = False
