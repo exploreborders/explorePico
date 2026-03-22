@@ -220,7 +220,7 @@ mqtt:
     - name: "Pico GPS Latitude"
       unique_id: "pico_gps_latitude"
       state_topic: "homeassistant/pico/sensor/gps_latitude"
-      unit_of_measurement: "°"
+      value_template: "{{ value }}"
       availability:
         topic: "homeassistant/pico/availability"
         payload_available: "online"

@@ -129,7 +129,6 @@ from config import (
     TOPIC_SIGNAL_QUALITY,
     TOPIC_NETWORK_OPERATOR,
     TOPIC_NETWORK_TYPE,
-    TOPIC_NETWORK_REGISTERED,
     TOPIC_GPS_LATITUDE,
     TOPIC_GPS_LONGITUDE,
     TOPIC_GPS_ALTITUDE,
@@ -648,10 +647,6 @@ def handle_lte_network_publish() -> None:
         network = get_network_info()
         mqtt_publish(TOPIC_NETWORK_OPERATOR, network.get("operator", ""))
         mqtt_publish(TOPIC_NETWORK_TYPE, network.get("type", ""))
-        mqtt_publish(
-            TOPIC_NETWORK_REGISTERED,
-            "registered" if network.get("registered") else "searching",
-        )
         last_network_publish = now
 
 
@@ -674,15 +669,33 @@ def handle_gps_publish() -> None:
         # Publish from latest known fix
         data = _last_gps_fix
         if data:
-            mqtt_publish(TOPIC_GPS_LATITUDE, str(data.get("latitude", 0)))
-            mqtt_publish(TOPIC_GPS_LONGITUDE, str(data.get("longitude", 0)))
+            # Latitude with N/S direction
+            lat = data.get("latitude", 0)
+            lat_dir = data.get("latitude_dir", "")
+            mqtt_publish(TOPIC_GPS_LATITUDE, f"{lat}")
+
+            # Longitude with E/W direction
+            lon = data.get("longitude", 0)
+            lon_dir = data.get("longitude_dir", "")
+            mqtt_publish(TOPIC_GPS_LONGITUDE, f"{lon}")
+
             mqtt_publish(TOPIC_GPS_ALTITUDE, str(data.get("altitude", 0)))
             mqtt_publish(TOPIC_GPS_SPEED, str(data.get("speed", 0)))
             mqtt_publish(TOPIC_GPS_COURSE, str(data.get("course", 0)))
-            mqtt_publish(TOPIC_GPS_SATELLITES, str(data.get("satellites", 0)))
-            # PDOP * 5 = approximate accuracy in meters
-            pdop = data.get("pdop", 0)
-            mqtt_publish(TOPIC_GPS_PDOP, str(round(pdop * 5, 1)))
+
+            # Satellites (may be None if CGNSINFO not available)
+            satellites = data.get("satellites")
+            mqtt_publish(
+                TOPIC_GPS_SATELLITES, str(satellites if satellites is not None else "")
+            )
+
+            # PDOP * 5 = approximate accuracy in meters (may be None)
+            pdop = data.get("pdop")
+            if pdop is not None:
+                mqtt_publish(TOPIC_GPS_PDOP, str(round(pdop * 5, 1)))
+            else:
+                mqtt_publish(TOPIC_GPS_PDOP, "")
+
             fix_status, _ = get_gps_fix_status()
             mqtt_publish(TOPIC_GPS_FIX_STATUS, str(fix_status))
         last_gps_publish = now

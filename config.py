@@ -9,12 +9,9 @@ MQTT Configuration:
     - MQTT_SSL: Enable/disable SSL/TLS
     - TOPIC_*: MQTT topic definitions for Home Assistant
 
-Device Configuration:
-    - DEVICE_NAME, DEVICE_IDENTIFIER: Device identification
-    - INTERNAL_TEMP_ADC_PIN: RP2350 internal temperature sensor
-
 Sensor Configuration:
     - DS18B20_PIN: GPIO pin for DS18B20 sensors
+    - INTERNAL_TEMP_ADC_PIN: RP2350 internal temperature sensor
     - ACS37030_I2C_*: ADS1115 I2C configuration for ACS37030 sensors
     - ACS37030_NUM_SENSORS: Number of ACS37030 sensors (max 5)
 
@@ -37,10 +34,6 @@ Secrets:
 
 # MQTT Configuration
 MQTT_SSL = True  # Enable SSL (port 8883 - works with LTE)
-
-# Device Configuration
-DEVICE_NAME = "Raspberry Pi Pico 2W"
-DEVICE_IDENTIFIER = "pico2w"
 
 # MQTT Topics
 TOPIC_LED_COMMAND = "homeassistant/pico/switch/led/set"
@@ -139,7 +132,6 @@ NETWORK_INFO_UPDATE_INTERVAL_MS = 300000
 # Connection Priority (try first, fallback second)
 PRIMARY_CONNECTION = "LTE"
 FALLBACK_CONNECTION = "WIFI"
-WIFI_ENABLED_WHEN_LTE_UP = False
 
 # -----------------------------------------------------------------------------
 # LTE/GPS/Network MQTT Topics
@@ -151,7 +143,6 @@ TOPIC_SIGNAL_QUALITY = "homeassistant/pico/sensor/signal_quality"
 
 TOPIC_NETWORK_OPERATOR = "homeassistant/pico/sensor/network_operator"
 TOPIC_NETWORK_TYPE = "homeassistant/pico/sensor/network_type"
-TOPIC_NETWORK_REGISTERED = "homeassistant/pico/sensor/network_registered"
 
 TOPIC_GPS_LATITUDE = "homeassistant/pico/sensor/gps_latitude"
 TOPIC_GPS_LONGITUDE = "homeassistant/pico/sensor/gps_longitude"

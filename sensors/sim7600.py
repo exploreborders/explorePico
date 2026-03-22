@@ -910,17 +910,13 @@ class SIM7600:
 
             return {
                 "latitude": lat,
+                "latitude_dir": lat_dir,
                 "longitude": lon,
+                "longitude_dir": lon_dir,
                 "altitude": round(alt, 1),
                 "speed": round(speed_kmh, 1),
                 "course": round(course, 1),
-                "pdop": 0.0,
-                "hdop": 0.0,
-                "vdop": 0.0,
-                "satellites": 0,
-                "satellites_gps": 0,
-                "satellites_glonass": 0,
-                "satellites_beidou": 0,
+                # Accuracy fields left as None - will be filled by CGNSINFO if available
                 "source": "CGPSINFO",
             }
 
