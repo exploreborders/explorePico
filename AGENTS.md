@@ -17,7 +17,7 @@ secondTest/
 ├── wifi_utils.py     # Shared WiFi connection utilities
 ├── lte_utils.py      # LTE utilities (SIM7600G-H)
 ├── blink.py          # Shared LED blink utilities
-├── updater_utils.py  # Shared backup/restore, version, logging
+├── updater_utils.py  # Shared version, logging utilities
 ├── github_updater.py # GitHub OTA updater
 └── sensors/
     ├── __init__.py

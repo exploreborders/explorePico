@@ -99,12 +99,10 @@ MQTT_LOOP_DELAY = 0.1  # Main loop iteration delay
 ERROR_DELAY_SHORT = 1.0  # After minor error
 ERROR_DELAY_LONG = 3.0  # After serious error/connection lost
 
-# Rollback Button Configuration
-UPDATE_BUTTON_PIN = 10  # GPIO pin for rollback trigger (double-press at boot)
-
 # GitHub WiFi Updater Configuration
 GITHUB_OWNER = "exploreborders"
 GITHUB_REPO = "explorePico"
+GITHUB_UPDATES_ENABLED = False  # Enable/disable GitHub OTA updates
 
 # -----------------------------------------------------------------------------
 # LTE / SIM7600G-H Configuration
@@ -236,13 +234,6 @@ def validate_config() -> bool:
         or ACS37030_NUM_SENSORS > 5
     ):
         errors.append("ACS37030_NUM_SENSORS must be 1-5")
-
-    if (
-        not isinstance(UPDATE_BUTTON_PIN, int)
-        or UPDATE_BUTTON_PIN < 0
-        or UPDATE_BUTTON_PIN > 28
-    ):
-        errors.append("UPDATE_BUTTON_PIN must be 0-22 or 26-28")
 
     # Internal temp ADC pin (RP2350 ADC0-ADC4)
     if (

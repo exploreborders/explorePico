@@ -1,32 +1,10 @@
 """
-Shared Updater Utilities for Pico 2W
+Shared Utilities for Pico 2W
 
-Common functions for GitHub updater including:
+Common functions for version management and logging:
     - Version management (read/write/compare)
-    - Backup and restore functionality
-    - Rollback detection and execution
     - Logging utilities
-
-Version Management:
-    - read_version(): Read current firmware version
-    - write_version(): Write new firmware version
-    - parse_version(): Parse version string to tuple
-    - compare_versions(): Compare two version strings
-
-Backup/Restore:
-    - create_backup(): Backup all Python files before update
-    - restore_backup(): Restore files from backup
-    - copy_file_content(): Write file with directory creation
-
-Rollback:
-    - detect_rollback_trigger(): Check for double-button press
-    - perform_rollback(): Execute rollback from backup
-
-Notes:
-    - Version stored in /.version file
-    - Backup stored in /backup folder
-    - secrets.py is excluded from backup (credentials)
-    - Only .py files are backed up
+    - File content copy utility
 
 Logger:
     - set_logger(): Configure logging function
@@ -40,17 +18,8 @@ Usage:
     log("TAG", "message")  # Uses custom tag
 """
 
-import machine
-import time
-import uos
-
 VERSION_FILE = "/.version"
-BACKUP_FOLDER = "/backup"
 
-# Files to exclude from backup
-EXCLUDE_FILES = {".version", "secrets.py"}
-
-# Default logger - can be overridden
 _log_fn = None
 _log_tag = "UPD"
 
@@ -74,7 +43,6 @@ def log(tag: str, message: str | None = None) -> None:
         tag: Tag/prefix for the message
         message: Message to log (optional for backward compatibility)
     """
-    # Handle backward compatibility: if only one arg, treat as message
     if message is None:
         message = tag
         tag = _log_tag
@@ -137,169 +105,14 @@ def compare_versions(current: str, new: str) -> int:
         return -1
 
 
-def list_python_files(root_dir: str = ".") -> list[tuple[str, str]]:
-    """Recursively list all .py files in directory.
-
-    Returns list of (source_path, dest_relative_path) tuples.
-    Excludes files in EXCLUDE_FILES and __pycache__.
-    """
-    files = []
-
-    def scan_dir(current_dir: str):
-        try:
-            entries = uos.listdir(current_dir)
-        except Exception:
-            return
-
-        for entry in entries:
-            # Skip hidden files and pycache
-            if entry.startswith("."):
-                continue
-            if entry == "__pycache__":
-                continue
-
-            full_path = f"{current_dir}/{entry}" if current_dir != "." else entry
-
-            try:
-                stat = uos.stat(full_path)
-                if stat[0] & 0x4000:  # Directory
-                    # Only recurse into known subdirectories
-                    if entry in ("sensors",):
-                        scan_dir(full_path)
-                elif entry.endswith(".py") and entry not in EXCLUDE_FILES:
-                    # Store as relative path from root
-                    files.append((full_path, full_path))
-            except Exception:
-                pass
-
-    scan_dir(root_dir)
-    return files
-
-
-def create_backup() -> bool:
-    """Backup all Python files before update."""
-    try:
-        # Remove existing backup if any
-        _remove_backup_folder()
-
-        # Create backup directory
-        uos.mkdir(BACKUP_FOLDER)
-
-        # Get all .py files
-        files_to_backup = list_python_files(".")
-
-        # Backup each file
-        for src_path, dst_rel_path in files_to_backup:
-            try:
-                with open(src_path, "r") as src:
-                    content = src.read()
-                dst_path = f"{BACKUP_FOLDER}/{dst_rel_path}"
-
-                # Create subdirectory if needed
-                if "/" in dst_rel_path:
-                    dst_dir = dst_rel_path.rsplit("/", 1)[0]
-                    try:
-                        uos.mkdir(f"{BACKUP_FOLDER}/{dst_dir}")
-                    except Exception:
-                        pass
-
-                with open(dst_path, "w") as dst:
-                    dst.write(content)
-            except Exception as e:
-                log(f"Backup error: {src_path} -> {e}")
-
-        log(f"Backup created ({len(files_to_backup)} files)")
-        return True
-    except Exception as e:
-        log(f"Backup failed: {e}")
-        return False
-
-
-def _remove_backup_folder() -> None:
-    """Helper to remove backup folder and all contents."""
-    try:
-        # Recursively remove all files and subdirectories
-        def remove_recursive(path: str) -> None:
-            try:
-                stat = uos.stat(path)
-                if stat[0] & 0x4000:  # Is directory
-                    # Remove all contents first
-                    try:
-                        for entry in uos.listdir(path):
-                            remove_recursive(f"{path}/{entry}")
-                    except Exception:
-                        pass
-                    # Remove the now-empty directory
-                    try:
-                        uos.rmdir(path)
-                    except Exception:
-                        pass
-                else:
-                    # It's a file, remove it
-                    uos.remove(path)
-            except Exception:
-                pass
-
-        # Start recursive removal from backup folder
-        remove_recursive(BACKUP_FOLDER)
-
-        # Try to remove the backup folder itself
-        try:
-            uos.rmdir(BACKUP_FOLDER)
-        except Exception:
-            pass  # Folder may already be removed
-
-    except Exception:
-        pass  # Folder doesn't exist, that's fine
-
-
-def restore_backup() -> bool:
-    """Restore all files from backup."""
-    try:
-        files = uos.listdir(BACKUP_FOLDER)
-
-        for f in files:
-            src_path = f"{BACKUP_FOLDER}/{f}"
-
-            try:
-                stat = uos.stat(src_path)
-                if stat[0] & 0x4000:  # Directory
-                    # Create directory in root
-                    try:
-                        uos.mkdir(f)
-                    except Exception:
-                        pass
-
-                    # Restore all files in directory
-                    subfiles = uos.listdir(src_path)
-                    for sf in subfiles:
-                        with open(f"{src_path}/{sf}", "r") as src:
-                            content = src.read()
-                        with open(f"{f}/{sf}", "w") as dst:
-                            dst.write(content)
-                else:
-                    # Regular file
-                    with open(src_path, "r") as src:
-                        content = src.read()
-                    with open(f, "w") as dst:
-                        dst.write(content)
-            except Exception as e:
-                log(f"Restore error: {f} -> {e}")
-
-        uos.rmdir(BACKUP_FOLDER)
-        log("Backup restored")
-        return True
-    except Exception as e:
-        log(f"Restore failed: {e}")
-        return False
-
-
 def copy_file_content(content: str, filename: str) -> bool:
     """Write file content to destination, creating directories if needed."""
     try:
         if "/" in filename:
             dst_dir = filename.rsplit("/", 1)[0]
             try:
+                import uos
+
                 uos.mkdir(dst_dir)
             except Exception:
                 pass
@@ -310,71 +123,4 @@ def copy_file_content(content: str, filename: str) -> bool:
         return True
     except Exception as e:
         log(f"Write failed: {filename} -> {e}")
-        return False
-
-
-def detect_rollback_trigger(button_pin: int = 10) -> bool:
-    """Check for double-button press within 2 seconds at boot.
-
-    Args:
-        button_pin: GPIO pin for the button (default: 10)
-
-    Returns:
-        True if rollback is triggered
-    """
-    btn = machine.Pin(button_pin, machine.Pin.IN, machine.Pin.PULL_UP)
-
-    if btn.value() == 0:
-        time.sleep(0.1)
-        first_press_time = time.ticks_ms()
-
-        while time.ticks_diff(time.ticks_ms(), first_press_time) < 2000:
-            if btn.value() == 1:
-                time.sleep(0.1)
-                second_wait_start = time.ticks_ms()
-                while time.ticks_diff(time.ticks_ms(), second_wait_start) < 1000:
-                    if btn.value() == 0:
-                        time.sleep(0.1)
-                        while btn.value() == 0:
-                            pass
-                        return True
-                break
-        while btn.value() == 0:
-            pass
-
-    return False
-
-
-def perform_rollback() -> bool:
-    """Restore from backup. Returns True on success."""
-    from blink import blink_pattern
-
-    log("Rolling back...")
-    blink_pattern("11")
-
-    try:
-        files = uos.listdir(BACKUP_FOLDER)
-        if not files:
-            log("No backup found")
-            blink_pattern("111")
-            return False
-
-        if not restore_backup():
-            blink_pattern("111")
-            return False
-
-        try:
-            uos.remove(VERSION_FILE)
-        except Exception:
-            pass
-
-        _remove_backup_folder()
-
-        log("Rollback complete")
-        blink_pattern("11011")
-        return True
-
-    except Exception as e:
-        log(f"Rollback failed: {e}")
-        blink_pattern("111")
         return False

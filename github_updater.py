@@ -17,17 +17,18 @@ except ImportError:
     except ImportError:
         requests = None
 
-from blink import blink_pattern
-from wifi_utils import is_connected
 from updater_utils import (
     log,
     read_version,
     write_version,
     compare_versions,
     copy_file_content,
-    create_backup,
-    restore_backup,
 )
+
+try:
+    from lte_utils import is_lte_connected
+except Exception:
+    is_lte_connected = None
 
 try:
     from secrets import GITHUB_TOKEN
@@ -116,7 +117,6 @@ def get_all_files(owner: str, repo: str, ref: str, seen: set = None) -> list:
             seen.add(path)
             files.append({"path": path, "raw_url": get_raw_url(owner, repo, path, ref)})
         elif item_type == "dir" and name not in [".git", ".vscode", "__pycache__"]:
-            # Recursively get files from subdirectory
             sub_path = f"{ref}/{name}" if ref else name
             sub_files = get_all_files(owner, repo, sub_path, seen)
             files.extend(sub_files)
@@ -174,35 +174,13 @@ def download_and_update(
         repo: GitHub repository name
         release_info: Dict with 'tag' and 'files' keys
         progress_callback: Optional callback(percent: int, status: str) -> None
-
-    Progress stages:
-        0-30%: Downloading files
-        31-60%: Writing files
-        61-90%: Applying update
-        91-99%: Preparing reboot
-        100%: Rebooting
     """
     log("Downloading files...")
-    blink_pattern("11")
 
     tag = release_info.get("tag", "")
     files = release_info.get("files", [])
 
     log(f"Updating {len(files)} files")
-
-    # Create backup BEFORE updating
-    log("Creating backup...")
-    if not create_backup():
-        log("Backup failed, aborting update!")
-        blink_pattern("111")
-        if progress_callback:
-            progress_callback(0, "error")
-        return False
-    log("Backup created")
-
-    # Track downloaded files for potential rollback
-    downloaded_files = []
-    total_files = len(files)
 
     for idx, file_info in enumerate(files):
         filename = file_info.get("path", "")
@@ -215,66 +193,32 @@ def download_and_update(
             log(f"Skipping {filename}")
             continue
 
-        try:
-            log(f"Downloading {filename}...")
-            content = download_file(raw_url)
-
-            if content is None:
-                log(f"Download failed: {filename}")
-                log("Update failed, restoring backup...")
-                blink_pattern("111")
-                restore_backup()
-                if progress_callback:
-                    progress_callback(0, "error")
-                return False
-
-            if not copy_file_content(content, filename):
-                log(f"Write failed: {filename}")
-                log("Restoring backup...")
-                blink_pattern("111")
-                restore_backup()
-                if progress_callback:
-                    progress_callback(0, "error")
-                return False
-
-            downloaded_files.append(filename)
-            log(f"Updated: {filename}")
-
-            # Progress: downloading (0-30%) + writing (31-60%)
-            if progress_callback and total_files > 0:
-                file_progress = int((idx + 1) * 30 / total_files)
-                progress_callback(file_progress, "downloading")
-
-        except Exception as e:
-            log(f"Failed to update {filename}: {e}")
-            log("Restoring backup...")
-            blink_pattern("111")
-            restore_backup()
+        content = download_file(raw_url)
+        if content is None:
+            log(f"Download failed: {filename}")
             if progress_callback:
                 progress_callback(0, "error")
             return False
 
-    # All files updated successfully
-    if progress_callback:
-        progress_callback(65, "applying")
-        time.sleep(0.2)
-        progress_callback(75, "applying")
-        time.sleep(0.2)
-        progress_callback(85, "applying")
+        if not copy_file_content(content, filename):
+            log(f"Write failed: {filename}")
+            if progress_callback:
+                progress_callback(0, "error")
+            return False
 
-    # Write version
+        log(f"Updated: {filename}")
+
+        if progress_callback:
+            progress_callback(int((idx + 1) * 90 / len(files)), "downloading")
+
     write_version(tag)
     log(f"Updated to {tag}")
 
     if progress_callback:
         progress_callback(95, "rebooting")
 
-    blink_pattern("11011")
-
-    # Give time for log to flush before reset
     time.sleep(0.5)
     machine.reset()
-    # Should never reach here
     return True
 
 
@@ -289,16 +233,16 @@ def check_and_update(owner: str, repo: str, progress_callback=None) -> bool:
     Returns:
         True if update was applied and device will reboot
     """
-    if not is_connected():
-        log("WiFi not connected")
+    from wifi_utils import is_connected
+
+    if not is_connected() and not (is_lte_connected and is_lte_connected()):
+        log("No network connection (WiFi/LTE)")
         if progress_callback:
             progress_callback(0, "error")
         return False
 
     log("Checking GitHub for updates...")
-    blink_pattern("11")
 
-    # First, just get the version tag (lightweight)
     new_version = get_latest_release_tag(owner, repo)
     if not new_version:
         log("No release found or API error")
@@ -319,7 +263,6 @@ def check_and_update(owner: str, repo: str, progress_callback=None) -> bool:
             progress_callback(100, "up to date")
         return False
 
-    # Update available - now fetch the file list
     log(f"Update available: {new_version}")
 
     release = get_latest_release(owner, repo)

@@ -13,10 +13,6 @@ Update Priority:
     1. GitHub updates (if enabled and network available)
     2. Launch main application
 
-Rollback:
-    Press the update button twice within 2 seconds at boot to trigger
-    a rollback to the previous firmware version.
-
 Usage:
     Upload all .py files to Pico flash. On reset, this file runs first.
     It will check for updates and then launch the application automatically.
@@ -24,17 +20,16 @@ Usage:
 Configuration:
     Update behavior is controlled by config.py settings:
     - GITHUB_OWNER, GITHUB_REPO: GitHub repository for updates
-    - UPDATE_BUTTON_PIN: GPIO pin for rollback trigger (default: 10)
+    - GITHUB_UPDATES_ENABLED: Enable/disable OTA updates
     - PRIMARY_CONNECTION: "LTE" or "WIFI"
     - FALLBACK_CONNECTION: "WIFI" or "LTE"
     - LTE_ENABLED: Enable/disable LTE
 """
 
 import sys
-import machine
 
 from wifi_utils import scan_and_connect
-from updater_utils import log, detect_rollback_trigger, perform_rollback
+from updater_utils import log
 
 try:
     from lte_utils import sync_time
@@ -48,7 +43,7 @@ try:
     from config import (
         GITHUB_OWNER,
         GITHUB_REPO,
-        UPDATE_BUTTON_PIN,
+        GITHUB_UPDATES_ENABLED,
         LTE_ENABLED,
         LTE_APN,
         LTE_SIM_PIN,
@@ -60,8 +55,6 @@ try:
         PRIMARY_CONNECTION,
         FALLBACK_CONNECTION,
     )
-
-    GITHUB_UPDATES_ENABLED = False
 except Exception:
     GITHUB_UPDATES_ENABLED = False
     LTE_ENABLED = False
@@ -161,16 +154,6 @@ def try_primary_connection() -> bool:
 
 github_updated = False
 update_check_executed = False
-
-if GITHUB_UPDATES_ENABLED:
-    try:
-        if detect_rollback_trigger(UPDATE_BUTTON_PIN):
-            log("Rollback triggered!")
-            if perform_rollback():
-                log("Rebooting...")
-                machine.reset()
-    except Exception as e:
-        log(f"Rollback check failed: {e}")
 
 log(f"Primary: {PRIMARY_CONNECTION}, Fallback: {FALLBACK_CONNECTION}")
 
