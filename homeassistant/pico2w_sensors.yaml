@@ -220,7 +220,7 @@ mqtt:
     - name: "Pico GPS Latitude"
       unique_id: "pico_gps_latitude"
       state_topic: "homeassistant/pico/sensor/gps_latitude"
-      value_template: "{{ value }}"
+      unit_of_measurement: "°"
       availability:
         topic: "homeassistant/pico/availability"
         payload_available: "online"
@@ -352,6 +352,21 @@ mqtt:
       command_topic: "homeassistant/pico/update/cmd"
       payload_install: "PRESS"
       device_class: "firmware"
+      availability:
+        topic: "homeassistant/pico/availability"
+        payload_available: "online"
+        payload_not_available: "offline"
+      device:
+        identifiers:
+          - pico2w
+        name: "Raspberry Pi Pico 2W"
+
+  device_tracker:
+    # Pico 2W Location (GPS via MQTT JSON)
+    - name: "Pico 2W Location"
+      unique_id: "pico2w_location"
+      state_topic: "homeassistant/pico/availability"
+      json_attributes_topic: "homeassistant/device_tracker/pico2w/location"
       availability:
         topic: "homeassistant/pico/availability"
         payload_available: "online"

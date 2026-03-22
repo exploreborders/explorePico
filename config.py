@@ -156,6 +156,8 @@ TOPIC_GPS_FIX_STATUS = "homeassistant/pico/sensor/gps_fix_status"
 
 TOPIC_GPS_INTERVAL_SET = "homeassistant/pico/gps/set_interval"
 
+TOPIC_DEVICE_TRACKER = "homeassistant/device_tracker/pico2w/location"
+
 # Try to import from secrets.py, fallback to this file for development
 try:
     from secrets import (

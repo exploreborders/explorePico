@@ -138,6 +138,7 @@ from config import (
     TOPIC_GPS_COURSE,
     TOPIC_GPS_INTERVAL_SET,
     TOPIC_GPS_FIX_STATUS,
+    TOPIC_DEVICE_TRACKER,
     LTE_UART_ID,
     LTE_TX_PIN,
     LTE_RX_PIN,
@@ -669,14 +670,10 @@ def handle_gps_publish() -> None:
         # Publish from latest known fix
         data = _last_gps_fix
         if data:
-            # Latitude with N/S direction
             lat = data.get("latitude", 0)
-            lat_dir = data.get("latitude_dir", "")
             mqtt_publish(TOPIC_GPS_LATITUDE, f"{lat}")
 
-            # Longitude with E/W direction
             lon = data.get("longitude", 0)
-            lon_dir = data.get("longitude_dir", "")
             mqtt_publish(TOPIC_GPS_LONGITUDE, f"{lon}")
 
             mqtt_publish(TOPIC_GPS_ALTITUDE, str(data.get("altitude", 0)))
@@ -698,6 +695,19 @@ def handle_gps_publish() -> None:
 
             fix_status, _ = get_gps_fix_status()
             mqtt_publish(TOPIC_GPS_FIX_STATUS, str(fix_status))
+
+            # Device tracker (raw numeric values for HA)
+            pdop = data.get("pdop")
+            tracker_payload = ujson.dumps(
+                {
+                    "latitude": data.get("latitude", 0),
+                    "longitude": data.get("longitude", 0),
+                    "gps_accuracy": round(pdop * 5, 1) if pdop else 0,
+                    "altitude": data.get("altitude", 0),
+                    "speed": data.get("speed", 0),
+                }
+            )
+            mqtt_publish(TOPIC_DEVICE_TRACKER, tracker_payload, retain=True)
         last_gps_publish = now
 
 
