@@ -216,51 +216,6 @@ mqtt:
           - pico2w
         name: "Raspberry Pi Pico 2W"
 
-    # Current 3 (raw - before offset)
-    - name: "Pico Current 3 Raw"
-      unique_id: "pico_current_3_raw"
-      state_topic: "homeassistant/pico/sensor/current_3"
-      unit_of_measurement: "A"
-      device_class: "current"
-      availability:
-        topic: "homeassistant/pico/availability"
-        payload_available: "online"
-        payload_not_available: "offline"
-      device:
-        identifiers:
-          - pico2w
-        name: "Raspberry Pi Pico 2W"
-
-    # Current 4 (raw - before offset)
-    - name: "Pico Current 4 Raw"
-      unique_id: "pico_current_4_raw"
-      state_topic: "homeassistant/pico/sensor/current_4"
-      unit_of_measurement: "A"
-      device_class: "current"
-      availability:
-        topic: "homeassistant/pico/availability"
-        payload_available: "online"
-        payload_not_available: "offline"
-      device:
-        identifiers:
-          - pico2w
-        name: "Raspberry Pi Pico 2W"
-
-    # Current 5 (raw - before offset)
-    - name: "Pico Current 5 Raw"
-      unique_id: "pico_current_5_raw"
-      state_topic: "homeassistant/pico/sensor/current_5"
-      unit_of_measurement: "A"
-      device_class: "current"
-      availability:
-        topic: "homeassistant/pico/availability"
-        payload_available: "online"
-        payload_not_available: "offline"
-      device:
-        identifiers:
-          - pico2w
-        name: "Raspberry Pi Pico 2W"
-
     # GPS Latitude
     - name: "Pico GPS Latitude"
       unique_id: "pico_gps_latitude"
@@ -458,34 +413,34 @@ template:
     # Current 1 (with offset applied)
     - name: "Pico Current 1"
       unique_id: "pico_current_1_calibrated"
-      state: "{{ states('sensor.pico_current_1_raw') | float(0) + states('input_number.pico_current_1_offset') | float(0) }}"
+      state: "{{ states('sensor.raspberry_pi_pico_2w_pico_current_1_raw') | float(0) + states('input_number.pico_current_1_offset') | float(0) }}"
       unit_of_measurement: "A"
       device_class: "current"
 
     # Current 2 (with offset applied)
     - name: "Pico Current 2"
       unique_id: "pico_current_2_calibrated"
-      state: "{{ states('sensor.pico_current_2_raw') | float(0) + states('input_number.pico_current_2_offset') | float(0) }}"
+      state: "{{ states('sensor.raspberry_pi_pico_2w_pico_current_2_raw') | float(0) + states('input_number.pico_current_2_offset') | float(0) }}"
       unit_of_measurement: "A"
       device_class: "current"
 
     # Current 3 (with offset applied)
     - name: "Pico Current 3"
       unique_id: "pico_current_3_calibrated"
-      state: "{{ states('sensor.pico_current_3_raw') | float(0) + states('input_number.pico_current_3_offset') | float(0) }}"
+      state: "{{ states('sensor.raspberry_pi_pico_2w_pico_current_3_raw') | float(0) + states('input_number.pico_current_3_offset') | float(0) }}"
       unit_of_measurement: "A"
       device_class: "current"
 
     # Current 4 (with offset applied)
     - name: "Pico Current 4"
       unique_id: "pico_current_4_calibrated"
-      state: "{{ states('sensor.pico_current_4_raw') | float(0) + states('input_number.pico_current_4_offset') | float(0) }}"
+      state: "{{ states('sensor.raspberry_pi_pico_2w_pico_current_4_raw') | float(0) + states('input_number.pico_current_4_offset') | float(0) }}"
       unit_of_measurement: "A"
       device_class: "current"
 
     # Current 5 (with offset applied)
     - name: "Pico Current 5"
       unique_id: "pico_current_5_calibrated"
-      state: "{{ states('sensor.pico_current_5_raw') | float(0) + states('input_number.pico_current_5_offset') | float(0) }}"
+      state: "{{ states('sensor.raspberry_pi_pico_2w_pico_current_5_raw') | float(0) + states('input_number.pico_current_5_offset') | float(0) }}"
       unit_of_measurement: "A"
       device_class: "current"

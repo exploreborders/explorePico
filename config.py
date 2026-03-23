@@ -89,7 +89,7 @@ ACS37030_I2C_ID = 0  # Use I2C0
 ACS37030_SENSITIVITY = 0.066  # V/A for ±20A (66 mV/A version)
 ACS37030_ZERO_POINT = 1.65  # V (zero current voltage)
 ACS37030_ZERO_OFFSET = (
-    0.00  # Calibration offset (adjust if not exactly 0A at no current)
+    0.1  # Calibration offset (adjust if not exactly 0A at no current)
 )
 ACS37030_NUM_SENSORS = 5  # Number of ACS37030 sensors (max 5)
 ACS37030_PICO_ADC_PIN = 26  # GP26 for 5th sensor (ADC0)
