@@ -52,6 +52,20 @@ TOPIC_CURRENT_3_STATE = "homeassistant/pico/sensor/current_3"
 TOPIC_CURRENT_4_STATE = "homeassistant/pico/sensor/current_4"
 TOPIC_CURRENT_5_STATE = "homeassistant/pico/sensor/current_5"
 
+# Current sensor offset topics (receive from HA input_number)
+TOPIC_CURRENT_1_OFFSET = "homeassistant/pico/sensor/current_1/offset"
+TOPIC_CURRENT_2_OFFSET = "homeassistant/pico/sensor/current_2/offset"
+TOPIC_CURRENT_3_OFFSET = "homeassistant/pico/sensor/current_3/offset"
+TOPIC_CURRENT_4_OFFSET = "homeassistant/pico/sensor/current_4/offset"
+TOPIC_CURRENT_5_OFFSET = "homeassistant/pico/sensor/current_5/offset"
+
+# Current sensor offset state topics (reply to HA)
+TOPIC_CURRENT_1_OFFSET_STATE = "homeassistant/pico/sensor/current_1/offset_state"
+TOPIC_CURRENT_2_OFFSET_STATE = "homeassistant/pico/sensor/current_2/offset_state"
+TOPIC_CURRENT_3_OFFSET_STATE = "homeassistant/pico/sensor/current_3/offset_state"
+TOPIC_CURRENT_4_OFFSET_STATE = "homeassistant/pico/sensor/current_4/offset_state"
+TOPIC_CURRENT_5_OFFSET_STATE = "homeassistant/pico/sensor/current_5/offset_state"
+
 # Device availability topic (for last-will and birth message)
 TOPIC_AVAILABILITY = "homeassistant/pico/availability"
 
@@ -75,7 +89,7 @@ ACS37030_I2C_ID = 0  # Use I2C0
 ACS37030_SENSITIVITY = 0.066  # V/A for ±20A (66 mV/A version)
 ACS37030_ZERO_POINT = 1.65  # V (zero current voltage)
 ACS37030_ZERO_OFFSET = (
-    0.008  # Calibration offset (adjust if not exactly 0A at no current)
+    0.00  # Calibration offset (adjust if not exactly 0A at no current)
 )
 ACS37030_NUM_SENSORS = 5  # Number of ACS37030 sensors (max 5)
 ACS37030_PICO_ADC_PIN = 26  # GP26 for 5th sensor (ADC0)

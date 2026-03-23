@@ -115,6 +115,16 @@ from config import (
     TOPIC_CURRENT_3_STATE,
     TOPIC_CURRENT_4_STATE,
     TOPIC_CURRENT_5_STATE,
+    TOPIC_CURRENT_1_OFFSET,
+    TOPIC_CURRENT_2_OFFSET,
+    TOPIC_CURRENT_3_OFFSET,
+    TOPIC_CURRENT_4_OFFSET,
+    TOPIC_CURRENT_5_OFFSET,
+    TOPIC_CURRENT_1_OFFSET_STATE,
+    TOPIC_CURRENT_2_OFFSET_STATE,
+    TOPIC_CURRENT_3_OFFSET_STATE,
+    TOPIC_CURRENT_4_OFFSET_STATE,
+    TOPIC_CURRENT_5_OFFSET_STATE,
     TOPIC_UPDATE_CMD,
     TOPIC_UPDATE_STATE,
     TOPIC_UPDATE_LATEST,
@@ -226,6 +236,10 @@ latest_version_received = None
 last_sensor_publish = 0
 _last_mqtt_values = {}
 
+# Current sensor offsets (received from HA input_number)
+_current_offsets = [0.0, 0.0, 0.0, 0.0, 0.0]
+reconnect_count = 0
+
 # LTE/GPS state
 gps_update_interval_ms = GPS_UPDATE_INTERVAL_MS
 last_gps_publish = 0
@@ -260,6 +274,7 @@ def _publish_sensor_value(
     sensor_manager=None,
     sensor_index: int | None = None,
     needs_unavailable: bool = False,
+    apply_offset: bool = False,
 ) -> None:
     """Generic sensor publish with unavailable handling."""
     value = read_func()
@@ -345,12 +360,22 @@ CURRENT_STATE_TOPICS = [
     TOPIC_CURRENT_5_STATE,
 ]
 
+
+def _get_current_read_func(index: int):
+    """Create closure for current sensor reading with offset."""
+
+    def read_current():
+        return _read_current_with_offset(index)
+
+    return read_current
+
+
 if ENABLE_ACS37030 and current_sensors:
     for i, sensor_manager in enumerate(current_sensors):
         SENSOR_REGISTRY.append(
             {
                 "name": f"current_{i + 1}",
-                "read_func": sensor_manager.read,
+                "read_func": _get_current_read_func(i),
                 "state_topic": CURRENT_STATE_TOPICS[i],
                 "sensor_manager": sensor_manager,
                 "needs_unavailable": True,
@@ -361,6 +386,22 @@ if ENABLE_ACS37030 and current_sensors:
 # -----------------------------------------------------------------------------
 # MQTT PUBLISH FUNCTIONS
 # -----------------------------------------------------------------------------
+def _read_current_with_offset(index: int) -> float | None:
+    """Read current sensor value and apply offset.
+
+    Args:
+        index: Sensor index (0-4)
+
+    Returns:
+        Adjusted current value in Amps, or None if not available
+    """
+    if index < len(current_sensors):
+        raw = current_sensors[index].read()
+        if raw is not None:
+            return round(raw + _current_offsets[index], 2)
+    return None
+
+
 def publish_all_sensors() -> None:
     """Publish all sensor values from registry."""
     for sensor in SENSOR_REGISTRY:
@@ -370,6 +411,7 @@ def publish_all_sensors() -> None:
             sensor_manager=sensor.get("sensor_manager"),
             sensor_index=sensor.get("sensor_index"),
             needs_unavailable=sensor.get("needs_unavailable", False),
+            apply_offset=sensor.get("apply_offset", False),
         )
 
 
@@ -501,6 +543,41 @@ def on_message(topic: bytes, msg: bytes) -> None:
             except Exception as e:
                 log("ERROR", f"Failed to parse GPS interval: {e}")
 
+        elif topic_str == TOPIC_CURRENT_1_OFFSET:
+            try:
+                _current_offsets[0] = float(msg_str)
+                mqtt_publish(TOPIC_CURRENT_1_OFFSET_STATE, str(_current_offsets[0]))
+            except ValueError:
+                pass
+
+        elif topic_str == TOPIC_CURRENT_2_OFFSET:
+            try:
+                _current_offsets[1] = float(msg_str)
+                mqtt_publish(TOPIC_CURRENT_2_OFFSET_STATE, str(_current_offsets[1]))
+            except ValueError:
+                pass
+
+        elif topic_str == TOPIC_CURRENT_3_OFFSET:
+            try:
+                _current_offsets[2] = float(msg_str)
+                mqtt_publish(TOPIC_CURRENT_3_OFFSET_STATE, str(_current_offsets[2]))
+            except ValueError:
+                pass
+
+        elif topic_str == TOPIC_CURRENT_4_OFFSET:
+            try:
+                _current_offsets[3] = float(msg_str)
+                mqtt_publish(TOPIC_CURRENT_4_OFFSET_STATE, str(_current_offsets[3]))
+            except ValueError:
+                pass
+
+        elif topic_str == TOPIC_CURRENT_5_OFFSET:
+            try:
+                _current_offsets[4] = float(msg_str)
+                mqtt_publish(TOPIC_CURRENT_5_OFFSET_STATE, str(_current_offsets[4]))
+            except ValueError:
+                pass
+
     except Exception as e:
         log("ERROR", f"Message handling failed: {e}")
 
@@ -548,6 +625,11 @@ def connect_mqtt() -> bool:
         mqtt_client.subscribe(TOPIC_UPDATE_CMD)
         mqtt_client.subscribe(TOPIC_UPDATE_LATEST)
         mqtt_client.subscribe(TOPIC_GPS_INTERVAL_SET)
+        mqtt_client.subscribe(TOPIC_CURRENT_1_OFFSET)
+        mqtt_client.subscribe(TOPIC_CURRENT_2_OFFSET)
+        mqtt_client.subscribe(TOPIC_CURRENT_3_OFFSET)
+        mqtt_client.subscribe(TOPIC_CURRENT_4_OFFSET)
+        mqtt_client.subscribe(TOPIC_CURRENT_5_OFFSET)
         log("MQTT", "Subscribed!")
 
         time.sleep(MQTT_DELAY_INITIAL_STATE)

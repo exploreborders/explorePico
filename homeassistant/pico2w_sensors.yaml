@@ -141,9 +141,9 @@ mqtt:
           - pico2w
         name: "Raspberry Pi Pico 2W"
 
-    # Current 1
-    - name: "Pico Current 1"
-      unique_id: "pico_current_1"
+    # Current 1 (raw - before offset)
+    - name: "Pico Current 1 Raw"
+      unique_id: "pico_current_1_raw"
       state_topic: "homeassistant/pico/sensor/current_1"
       unit_of_measurement: "A"
       device_class: "current"
@@ -156,9 +156,9 @@ mqtt:
           - pico2w
         name: "Raspberry Pi Pico 2W"
 
-    # Current 2
-    - name: "Pico Current 2"
-      unique_id: "pico_current_2"
+    # Current 2 (raw - before offset)
+    - name: "Pico Current 2 Raw"
+      unique_id: "pico_current_2_raw"
       state_topic: "homeassistant/pico/sensor/current_2"
       unit_of_measurement: "A"
       device_class: "current"
@@ -171,9 +171,9 @@ mqtt:
           - pico2w
         name: "Raspberry Pi Pico 2W"
 
-    # Current 3
-    - name: "Pico Current 3"
-      unique_id: "pico_current_3"
+    # Current 3 (raw - before offset)
+    - name: "Pico Current 3 Raw"
+      unique_id: "pico_current_3_raw"
       state_topic: "homeassistant/pico/sensor/current_3"
       unit_of_measurement: "A"
       device_class: "current"
@@ -186,9 +186,9 @@ mqtt:
           - pico2w
         name: "Raspberry Pi Pico 2W"
 
-    # Current 4
-    - name: "Pico Current 4"
-      unique_id: "pico_current_4"
+    # Current 4 (raw - before offset)
+    - name: "Pico Current 4 Raw"
+      unique_id: "pico_current_4_raw"
       state_topic: "homeassistant/pico/sensor/current_4"
       unit_of_measurement: "A"
       device_class: "current"
@@ -201,9 +201,54 @@ mqtt:
           - pico2w
         name: "Raspberry Pi Pico 2W"
 
-    # Current 5
-    - name: "Pico Current 5"
-      unique_id: "pico_current_5"
+    # Current 5 (raw - before offset)
+    - name: "Pico Current 5 Raw"
+      unique_id: "pico_current_5_raw"
+      state_topic: "homeassistant/pico/sensor/current_5"
+      unit_of_measurement: "A"
+      device_class: "current"
+      availability:
+        topic: "homeassistant/pico/availability"
+        payload_available: "online"
+        payload_not_available: "offline"
+      device:
+        identifiers:
+          - pico2w
+        name: "Raspberry Pi Pico 2W"
+
+    # Current 3 (raw - before offset)
+    - name: "Pico Current 3 Raw"
+      unique_id: "pico_current_3_raw"
+      state_topic: "homeassistant/pico/sensor/current_3"
+      unit_of_measurement: "A"
+      device_class: "current"
+      availability:
+        topic: "homeassistant/pico/availability"
+        payload_available: "online"
+        payload_not_available: "offline"
+      device:
+        identifiers:
+          - pico2w
+        name: "Raspberry Pi Pico 2W"
+
+    # Current 4 (raw - before offset)
+    - name: "Pico Current 4 Raw"
+      unique_id: "pico_current_4_raw"
+      state_topic: "homeassistant/pico/sensor/current_4"
+      unit_of_measurement: "A"
+      device_class: "current"
+      availability:
+        topic: "homeassistant/pico/availability"
+        payload_available: "online"
+        payload_not_available: "offline"
+      device:
+        identifiers:
+          - pico2w
+        name: "Raspberry Pi Pico 2W"
+
+    # Current 5 (raw - before offset)
+    - name: "Pico Current 5 Raw"
+      unique_id: "pico_current_5_raw"
       state_topic: "homeassistant/pico/sensor/current_5"
       unit_of_measurement: "A"
       device_class: "current"
@@ -313,20 +358,6 @@ mqtt:
           - pico2w
         name: "Raspberry Pi Pico 2W"
 
-    # GPS Course (Direction of movement)
-    - name: "Pico GPS Course"
-      unique_id: "pico_gps_course"
-      state_topic: "homeassistant/pico/sensor/gps_course"
-      unit_of_measurement: "°"
-      availability:
-        topic: "homeassistant/pico/availability"
-        payload_available: "online"
-        payload_not_available: "offline"
-      device:
-        identifiers:
-          - pico2w
-        name: "Raspberry Pi Pico 2W"
-
   switch:
     # LED Switch
     - name: "Pico LED"
@@ -371,6 +402,129 @@ mqtt:
         topic: "homeassistant/pico/availability"
         payload_available: "online"
         payload_not_available: "offline"
+      device:
+        identifiers:
+          - pico2w
+        name: "Raspberry Pi Pico 2W"
+
+input_number:
+  pico_current_1_offset:
+    name: "Pico Current 1 Offset"
+    min: -5
+    max: 5
+    step: 0.01
+    unit_of_measurement: "A"
+    mode: slider
+    icon: mdi:offset-horizontal
+
+  pico_current_2_offset:
+    name: "Pico Current 2 Offset"
+    min: -5
+    max: 5
+    step: 0.01
+    unit_of_measurement: "A"
+    mode: slider
+    icon: mdi:offset-horizontal
+
+  pico_current_3_offset:
+    name: "Pico Current 3 Offset"
+    min: -5
+    max: 5
+    step: 0.01
+    unit_of_measurement: "A"
+    mode: slider
+    icon: mdi:offset-horizontal
+
+  pico_current_4_offset:
+    name: "Pico Current 4 Offset"
+    min: -5
+    max: 5
+    step: 0.01
+    unit_of_measurement: "A"
+    mode: slider
+    icon: mdi:offset-horizontal
+
+  pico_current_5_offset:
+    name: "Pico Current 5 Offset"
+    min: -5
+    max: 5
+    step: 0.01
+    unit_of_measurement: "A"
+    mode: slider
+    icon: mdi:offset-horizontal
+
+template:
+  sensor:
+    # Current 1 (with offset applied)
+    - name: "Pico Current 1"
+      unique_id: "pico_current_1_calibrated"
+      state: "{{ states('sensor.pico_current_1_raw') | float(0) + states('input_number.pico_current_1_offset') | float(0) }}"
+      unit_of_measurement: "A"
+      device_class: "current"
+      availability:
+        - topic: "homeassistant/pico/availability"
+          payload_available: "online"
+          payload_not_available: "offline"
+      device:
+        identifiers:
+          - pico2w
+        name: "Raspberry Pi Pico 2W"
+
+    # Current 2 (with offset applied)
+    - name: "Pico Current 2"
+      unique_id: "pico_current_2_calibrated"
+      state: "{{ states('sensor.pico_current_2_raw') | float(0) + states('input_number.pico_current_2_offset') | float(0) }}"
+      unit_of_measurement: "A"
+      device_class: "current"
+      availability:
+        - topic: "homeassistant/pico/availability"
+          payload_available: "online"
+          payload_not_available: "offline"
+      device:
+        identifiers:
+          - pico2w
+        name: "Raspberry Pi Pico 2W"
+
+    # Current 3 (with offset applied)
+    - name: "Pico Current 3"
+      unique_id: "pico_current_3_calibrated"
+      state: "{{ states('sensor.pico_current_3_raw') | float(0) + states('input_number.pico_current_3_offset') | float(0) }}"
+      unit_of_measurement: "A"
+      device_class: "current"
+      availability:
+        - topic: "homeassistant/pico/availability"
+          payload_available: "online"
+          payload_not_available: "offline"
+      device:
+        identifiers:
+          - pico2w
+        name: "Raspberry Pi Pico 2W"
+
+    # Current 4 (with offset applied)
+    - name: "Pico Current 4"
+      unique_id: "pico_current_4_calibrated"
+      state: "{{ states('sensor.pico_current_4_raw') | float(0) + states('input_number.pico_current_4_offset') | float(0) }}"
+      unit_of_measurement: "A"
+      device_class: "current"
+      availability:
+        - topic: "homeassistant/pico/availability"
+          payload_available: "online"
+          payload_not_available: "offline"
+      device:
+        identifiers:
+          - pico2w
+        name: "Raspberry Pi Pico 2W"
+
+    # Current 5 (with offset applied)
+    - name: "Pico Current 5"
+      unique_id: "pico_current_5_calibrated"
+      state: "{{ states('sensor.pico_current_5_raw') | float(0) + states('input_number.pico_current_5_offset') | float(0) }}"
+      unit_of_measurement: "A"
+      device_class: "current"
+      availability:
+        - topic: "homeassistant/pico/availability"
+          payload_available: "online"
+          payload_not_available: "offline"
       device:
         identifiers:
           - pico2w
