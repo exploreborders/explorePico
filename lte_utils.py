@@ -350,28 +350,6 @@ def _sync_time_ntp() -> bool:
     return _sync_time_from_network()
 
 
-def _sync_time_from_network() -> bool:
-    """Fallback: Get time from LTE network via AT+CCLK.
-
-    Returns:
-        True if time synced successfully
-    """
-    if not _lte_manager or not _lte_manager.is_connected():
-        _log("TIME", "No LTE for network time")
-        return False
-
-    try:
-        sim = _lte_manager.get_sim()
-        if sim:
-            network_time = sim.get_network_time()
-            if network_time:
-                _log("TIME", f"Network time: {network_time}")
-                return True
-    except Exception as e:
-        _log("TIME", f"Network time failed: {e}")
-    return False
-
-
 def _is_network_available() -> bool:
     """Check if any network is available (WiFi or LTE)."""
     # Check WiFi
