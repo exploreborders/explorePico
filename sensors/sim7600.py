@@ -1200,6 +1200,49 @@ class SIM7600:
                 pass
         return None
 
+    def get_gps_time(self) -> tuple[int, int, int, int, int, int] | None:
+        """Get time from GPS data (AT+CGPSINFO).
+
+        Parses UTC time and date from GPS response.
+        Format: AT+CGPSINFO returns <lat>,<N/S>,<lon>,<E/W>,<date>,<UTC time>,...
+
+        Returns:
+            Tuple (year, month, day, hour, minute, second) or None
+        """
+        response = self.send_at("AT+CGPSINFO", timeout=3000)
+        if "+CGPSINFO:" not in response:
+            return None
+
+        try:
+            data_start = response.rfind(":") + 1
+            data = response[data_start:].strip()
+            parts = data.split(",")
+
+            if len(parts) < 6:
+                return None
+
+            lat = parts[0].strip()
+            if not lat:
+                return None
+
+            date_str = parts[4].strip()
+            utc_time = parts[5].strip()
+
+            if not date_str or not utc_time or date_str == "":
+                return None
+
+            hour = int(utc_time[0:2])
+            minute = int(utc_time[2:4])
+            second = int(utc_time[4:6])
+
+            day = int(date_str[0:2])
+            month = int(date_str[2:4])
+            year = int(date_str[4:6]) + 2000
+
+            return (year, month, day, hour, minute, second)
+        except Exception:
+            return None
+
 
 class SIM7600Manager:
     """Manager for SIM7600 with retry logic."""

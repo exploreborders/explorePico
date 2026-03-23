@@ -461,14 +461,6 @@ template:
       state: "{{ states('sensor.pico_current_1_raw') | float(0) + states('input_number.pico_current_1_offset') | float(0) }}"
       unit_of_measurement: "A"
       device_class: "current"
-      availability:
-        - topic: "homeassistant/pico/availability"
-          payload_available: "online"
-          payload_not_available: "offline"
-      device:
-        identifiers:
-          - pico2w
-        name: "Raspberry Pi Pico 2W"
 
     # Current 2 (with offset applied)
     - name: "Pico Current 2"
@@ -476,14 +468,6 @@ template:
       state: "{{ states('sensor.pico_current_2_raw') | float(0) + states('input_number.pico_current_2_offset') | float(0) }}"
       unit_of_measurement: "A"
       device_class: "current"
-      availability:
-        - topic: "homeassistant/pico/availability"
-          payload_available: "online"
-          payload_not_available: "offline"
-      device:
-        identifiers:
-          - pico2w
-        name: "Raspberry Pi Pico 2W"
 
     # Current 3 (with offset applied)
     - name: "Pico Current 3"
@@ -491,14 +475,6 @@ template:
       state: "{{ states('sensor.pico_current_3_raw') | float(0) + states('input_number.pico_current_3_offset') | float(0) }}"
       unit_of_measurement: "A"
       device_class: "current"
-      availability:
-        - topic: "homeassistant/pico/availability"
-          payload_available: "online"
-          payload_not_available: "offline"
-      device:
-        identifiers:
-          - pico2w
-        name: "Raspberry Pi Pico 2W"
 
     # Current 4 (with offset applied)
     - name: "Pico Current 4"
@@ -506,14 +482,6 @@ template:
       state: "{{ states('sensor.pico_current_4_raw') | float(0) + states('input_number.pico_current_4_offset') | float(0) }}"
       unit_of_measurement: "A"
       device_class: "current"
-      availability:
-        - topic: "homeassistant/pico/availability"
-          payload_available: "online"
-          payload_not_available: "offline"
-      device:
-        identifiers:
-          - pico2w
-        name: "Raspberry Pi Pico 2W"
 
     # Current 5 (with offset applied)
     - name: "Pico Current 5"
@@ -521,11 +489,3 @@ template:
       state: "{{ states('sensor.pico_current_5_raw') | float(0) + states('input_number.pico_current_5_offset') | float(0) }}"
       unit_of_measurement: "A"
       device_class: "current"
-      availability:
-        - topic: "homeassistant/pico/availability"
-          payload_available: "online"
-          payload_not_available: "offline"
-      device:
-        identifiers:
-          - pico2w
-        name: "Raspberry Pi Pico 2W"

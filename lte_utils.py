@@ -244,12 +244,11 @@ def get_network_info() -> dict:
 
 
 def sync_time(force: bool = False) -> bool:
-    """Sync system time from NTP server (MAIN ENTRY POINT).
+    """Sync system time from GPS (MAIN ENTRY POINT).
 
-    This is the SINGLE public time sync function. Use this in your code.
-
-    Uses NTP via WiFi or LTE connection. NTP is fast (< 1 second)
-    and reliable when network is available.
+    Priority:
+    1. GPS time (works with LTE or WiFi)
+    2. NTP via WiFi (if connected)
 
     Args:
         force: Force sync even if already synced
@@ -259,20 +258,68 @@ def sync_time(force: bool = False) -> bool:
     """
     global _time_synced, _time_sync_source
 
-    # Check if already synced
     if _time_synced and not force:
         _log("TIME", "Already synced (use force=True to resync)")
         return True
 
-    # Try NTP via network (WiFi or LTE)
-    _log("TIME", "Syncing time via NTP...")
-    if _sync_time_ntp():
+    _log("TIME", "Syncing time from GPS...")
+    if _sync_time_from_gps():
         _time_synced = True
-        _time_sync_source = "NTP"
-        _log("TIME", "Time synced via NTP")
+        _time_sync_source = "GPS"
+        _log("TIME", "Time synced via GPS")
         return True
 
-    _log("TIME", "NTP sync failed")
+    if is_wifi_connected():
+        _log("TIME", "Trying WiFi NTP...")
+        if _sync_time_ntp():
+            _time_synced = True
+            _time_sync_source = "NTP"
+            _log("TIME", "Time synced via WiFi NTP")
+            return True
+
+    _log("TIME", "Time sync failed - no valid source")
+    return False
+
+
+def _sync_time_from_gps() -> bool:
+    """Get time from GPS (AT+CGNSINFO).
+
+    Returns:
+        True if time synced successfully
+    """
+    if not _lte_manager:
+        _log("TIME", "No LTE manager for GPS")
+        return False
+
+    try:
+        sim = _lte_manager.sim
+        if not sim:
+            _log("TIME", "No SIM7600 instance")
+            return False
+
+        gps_time = sim.get_gps_time()
+        if not gps_time:
+            _log("TIME", "No GPS time available")
+            return False
+
+        year, month, day, hour, minute, second = gps_time
+
+        if year < 2020 or year > 2100:
+            _log("TIME", f"Invalid GPS time: {year}-{month:02d}-{day:02d}")
+            return False
+
+        import machine
+
+        rtc = machine.RTC()
+        rtc.datetime((year, month, day, 0, hour, minute, second, 0))
+        _log(
+            "TIME",
+            f"GPS time: {year}-{month:02d}-{day:02d} "
+            f"{hour:02d}:{minute:02d}:{second:02d}",
+        )
+        return True
+    except Exception as e:
+        _log("TIME", f"GPS time failed: {e}")
     return False
 
 
@@ -282,6 +329,7 @@ def _sync_time_ntp() -> bool:
         _log("TIME", "No network connection for NTP sync")
         return False
 
+    # Try standard NTP first
     try:
         import ntptime
 
@@ -297,7 +345,31 @@ def _sync_time_ntp() -> bool:
         return True
     except Exception as e:
         _log("TIME", f"NTP failed: {e}")
+
+    # Fallback: Try to get time from LTE network (AT+CCLK)
+    return _sync_time_from_network()
+
+
+def _sync_time_from_network() -> bool:
+    """Fallback: Get time from LTE network via AT+CCLK.
+
+    Returns:
+        True if time synced successfully
+    """
+    if not _lte_manager or not _lte_manager.is_connected():
+        _log("TIME", "No LTE for network time")
         return False
+
+    try:
+        sim = _lte_manager.get_sim()
+        if sim:
+            network_time = sim.get_network_time()
+            if network_time:
+                _log("TIME", f"Network time: {network_time}")
+                return True
+    except Exception as e:
+        _log("TIME", f"Network time failed: {e}")
+    return False
 
 
 def _is_network_available() -> bool:
@@ -316,6 +388,28 @@ def _is_network_available() -> bool:
     if _lte_manager and _lte_manager.is_connected():
         return True
 
+    return False
+
+
+def _sync_time_from_network() -> bool:
+    """Fallback: Get time from LTE network via AT+CCLK.
+
+    Returns:
+        True if time synced successfully
+    """
+    if not _lte_manager or not _lte_manager.is_connected():
+        _log("TIME", "No LTE for network time")
+        return False
+
+    try:
+        sim = _lte_manager.sim
+        if sim:
+            network_time = sim.get_network_time()
+            if network_time:
+                _log("TIME", f"Network time: {network_time}")
+                return True
+    except Exception as e:
+        _log("TIME", f"Network time failed: {e}")
     return False
 
 
