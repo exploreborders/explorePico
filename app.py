@@ -115,16 +115,6 @@ from config import (
     TOPIC_CURRENT_3_STATE,
     TOPIC_CURRENT_4_STATE,
     TOPIC_CURRENT_5_STATE,
-    TOPIC_CURRENT_1_OFFSET,
-    TOPIC_CURRENT_2_OFFSET,
-    TOPIC_CURRENT_3_OFFSET,
-    TOPIC_CURRENT_4_OFFSET,
-    TOPIC_CURRENT_5_OFFSET,
-    TOPIC_CURRENT_1_OFFSET_STATE,
-    TOPIC_CURRENT_2_OFFSET_STATE,
-    TOPIC_CURRENT_3_OFFSET_STATE,
-    TOPIC_CURRENT_4_OFFSET_STATE,
-    TOPIC_CURRENT_5_OFFSET_STATE,
     TOPIC_UPDATE_CMD,
     TOPIC_UPDATE_STATE,
     TOPIC_UPDATE_LATEST,
@@ -235,9 +225,6 @@ update_state = "Update Pico"
 latest_version_received = None
 last_sensor_publish = 0
 _last_mqtt_values = {}
-
-# Current sensor offsets (received from HA input_number)
-_current_offsets = [0.0, 0.0, 0.0, 0.0, 0.0]
 reconnect_count = 0
 
 # LTE/GPS state
@@ -387,18 +374,20 @@ if ENABLE_ACS37030 and current_sensors:
 # MQTT PUBLISH FUNCTIONS
 # -----------------------------------------------------------------------------
 def _read_current_with_offset(index: int) -> float | None:
-    """Read current sensor value and apply offset.
+    """Read current sensor value.
+
+    Note: Offset is now handled in Home Assistant via template sensors.
 
     Args:
         index: Sensor index (0-4)
 
     Returns:
-        Adjusted current value in Amps, or None if not available
+        Current value in Amps, or None if not available
     """
     if index < len(current_sensors):
         raw = current_sensors[index].read()
         if raw is not None:
-            return round(raw + _current_offsets[index], 2)
+            return round(raw, 2)
     return None
 
 
@@ -543,41 +532,6 @@ def on_message(topic: bytes, msg: bytes) -> None:
             except Exception as e:
                 log("ERROR", f"Failed to parse GPS interval: {e}")
 
-        elif topic_str == TOPIC_CURRENT_1_OFFSET:
-            try:
-                _current_offsets[0] = float(msg_str)
-                mqtt_publish(TOPIC_CURRENT_1_OFFSET_STATE, str(_current_offsets[0]))
-            except ValueError:
-                pass
-
-        elif topic_str == TOPIC_CURRENT_2_OFFSET:
-            try:
-                _current_offsets[1] = float(msg_str)
-                mqtt_publish(TOPIC_CURRENT_2_OFFSET_STATE, str(_current_offsets[1]))
-            except ValueError:
-                pass
-
-        elif topic_str == TOPIC_CURRENT_3_OFFSET:
-            try:
-                _current_offsets[2] = float(msg_str)
-                mqtt_publish(TOPIC_CURRENT_3_OFFSET_STATE, str(_current_offsets[2]))
-            except ValueError:
-                pass
-
-        elif topic_str == TOPIC_CURRENT_4_OFFSET:
-            try:
-                _current_offsets[3] = float(msg_str)
-                mqtt_publish(TOPIC_CURRENT_4_OFFSET_STATE, str(_current_offsets[3]))
-            except ValueError:
-                pass
-
-        elif topic_str == TOPIC_CURRENT_5_OFFSET:
-            try:
-                _current_offsets[4] = float(msg_str)
-                mqtt_publish(TOPIC_CURRENT_5_OFFSET_STATE, str(_current_offsets[4]))
-            except ValueError:
-                pass
-
     except Exception as e:
         log("ERROR", f"Message handling failed: {e}")
 
@@ -625,11 +579,6 @@ def connect_mqtt() -> bool:
         mqtt_client.subscribe(TOPIC_UPDATE_CMD)
         mqtt_client.subscribe(TOPIC_UPDATE_LATEST)
         mqtt_client.subscribe(TOPIC_GPS_INTERVAL_SET)
-        mqtt_client.subscribe(TOPIC_CURRENT_1_OFFSET)
-        mqtt_client.subscribe(TOPIC_CURRENT_2_OFFSET)
-        mqtt_client.subscribe(TOPIC_CURRENT_3_OFFSET)
-        mqtt_client.subscribe(TOPIC_CURRENT_4_OFFSET)
-        mqtt_client.subscribe(TOPIC_CURRENT_5_OFFSET)
         log("MQTT", "Subscribed!")
 
         time.sleep(MQTT_DELAY_INITIAL_STATE)

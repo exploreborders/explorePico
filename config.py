@@ -52,20 +52,6 @@ TOPIC_CURRENT_3_STATE = "homeassistant/pico/sensor/current_3"
 TOPIC_CURRENT_4_STATE = "homeassistant/pico/sensor/current_4"
 TOPIC_CURRENT_5_STATE = "homeassistant/pico/sensor/current_5"
 
-# Current sensor offset topics (receive from HA input_number)
-TOPIC_CURRENT_1_OFFSET = "homeassistant/pico/sensor/current_1/offset"
-TOPIC_CURRENT_2_OFFSET = "homeassistant/pico/sensor/current_2/offset"
-TOPIC_CURRENT_3_OFFSET = "homeassistant/pico/sensor/current_3/offset"
-TOPIC_CURRENT_4_OFFSET = "homeassistant/pico/sensor/current_4/offset"
-TOPIC_CURRENT_5_OFFSET = "homeassistant/pico/sensor/current_5/offset"
-
-# Current sensor offset state topics (reply to HA)
-TOPIC_CURRENT_1_OFFSET_STATE = "homeassistant/pico/sensor/current_1/offset_state"
-TOPIC_CURRENT_2_OFFSET_STATE = "homeassistant/pico/sensor/current_2/offset_state"
-TOPIC_CURRENT_3_OFFSET_STATE = "homeassistant/pico/sensor/current_3/offset_state"
-TOPIC_CURRENT_4_OFFSET_STATE = "homeassistant/pico/sensor/current_4/offset_state"
-TOPIC_CURRENT_5_OFFSET_STATE = "homeassistant/pico/sensor/current_5/offset_state"
-
 # Device availability topic (for last-will and birth message)
 TOPIC_AVAILABILITY = "homeassistant/pico/availability"
 
