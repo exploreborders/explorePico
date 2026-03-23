@@ -115,7 +115,6 @@ LTE_TX_PIN = 0  # GP0 → SIM7600 RXD (NOTE: TX/RX crossed!)
 LTE_RX_PIN = 1  # GP1 → SIM7600 TXD
 LTE_BAUD = 115200  # Default baud rate
 LTE_APN = "internet"  # O2 APN
-LTE_SIM_PIN = "5046"  # O2 SIM PIN
 
 LTE_CONNECT_TIMEOUT_MS = 90000
 
@@ -167,6 +166,7 @@ try:
         MQTT_PORT,
         MQTT_USER,
         MQTT_PASSWORD,
+        LTE_SIM_PIN,
     )
 except ImportError:
     raise ImportError(
@@ -246,6 +246,10 @@ def validate_config() -> bool:
     # LTE UART ID
     if not isinstance(LTE_UART_ID, int) or LTE_UART_ID < 0 or LTE_UART_ID > 1:
         errors.append("LTE_UART_ID must be 0 or 1")
+
+    # LTE SIM PIN (optional but recommended)
+    if LTE_SIM_PIN is not None and not isinstance(LTE_SIM_PIN, str):
+        errors.append("LTE_SIM_PIN must be a string or None")
 
     # LTE UART pins
     if (

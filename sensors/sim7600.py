@@ -381,6 +381,56 @@ class SIM7600:
         response = self.send_at(f'AT+CGDCONT=1,"IP","{apn}"', timeout=5000)
         return "OK" in response
 
+    def clear_pdp_contexts(self) -> None:
+        """Delete unnecessary PDP contexts (especially IMS context).
+
+        Some carriers (O2, Telekom) automatically create IMS context (cid=2)
+        for VoLTE which can interfere with data connection.
+        Must restart modem after clearing contexts.
+        """
+        self._log("Clearing unnecessary PDP contexts...")
+
+        # Delete contexts 2-5 (IMS and other auto-created contexts)
+        for cid in range(2, 6):
+            response = self.send_at(f"AT+CGDCONT={cid}", timeout=3000)
+            if "OK" in response:
+                self._log(f"Deleted context {cid}")
+
+        self._log("PDP contexts cleared (restart required)")
+
+    def restart_modem(self) -> bool:
+        """Restart modem (required after clearing PDP contexts).
+
+        Returns:
+            True if restart successful and modem is ready
+        """
+        self._log("Restarting modem...")
+        response = self.send_at("AT+CFUN=1,1", timeout=10000)
+
+        if "OK" not in response:
+            self._log("Modem restart command failed")
+            return False
+
+        self._log("Modem restarting, waiting 20s...")
+
+        # Wait for modem to fully restart
+        time.sleep(15)
+
+        # Wait for modem to respond to AT commands
+        for attempt in range(10):
+            try:
+                resp = self.send_at("AT", timeout=3000)
+                if "OK" in resp:
+                    self._log(f"Modem ready after {(attempt + 1) * 3}s")
+                    time.sleep(2)  # Extra stabilization time
+                    return True
+            except Exception:
+                pass
+            time.sleep(3)
+
+        self._log("Modem did not respond after restart")
+        return False
+
     def activate_pdp(self) -> bool:
         """Activate PDP context.
 
@@ -428,6 +478,26 @@ class SIM7600:
             self._log("Network registration failed")
             return False
 
+        # Clear unnecessary PDP contexts and restart modem
+        # Fixes issue where IMS context (cid=2) interferes with data connection
+        self.clear_pdp_contexts()
+
+        if not self.restart_modem():
+            self._log("Modem restart failed")
+            return False
+
+        # Re-enable phone function after restart
+        self._log("Re-enabling phone function after restart...")
+        if not self.set_phone_function(1):
+            self._log("Failed to re-enable phone function")
+            return False
+
+        # Wait for network registration after restart
+        self._log("Waiting for network after restart...")
+        if not self.wait_for_network(timeout_ms):
+            self._log("Network registration failed after restart")
+            return False
+
         self._log(f"Setting APN: {apn}")
         if not self.set_apn(apn):
             self._log("Failed to set APN")
@@ -438,33 +508,76 @@ class SIM7600:
             self._log("Failed to activate PDP")
             return False
 
-        self.lte_connected = True
-        self._log("LTE connected successfully")
+        # Verify PDP activation
+        self._log("Verifying PDP context...")
+        pdp_response = self.send_at("AT+CGACT?", timeout=3000)
+        self._log(f"PDP status: {pdp_response[:50]}")
 
         # Get and log IP address
+        self._log("Getting IP address...")
         ip_addr = self.get_ip_address()
         if ip_addr:
-            self._log(f"LTE IP address: {ip_addr}")
+            self._log(f"LTE IP: {ip_addr}")
+        else:
+            self._log("No IP address received")
+
+        self.lte_connected = True
+        self._log("LTE connected successfully")
 
         return True
 
     def get_ip_address(self) -> str | None:
         """Get the LTE IP address.
 
+        Tries multiple AT commands to get the IP address.
         Returns:
             IP address string or None
         """
+        # Method 1: AT+IPADDR (SIM7600 specific, simpler)
+        try:
+            response = self.send_at("AT+IPADDR", timeout=3000)
+            # Response: +IPADDR: 10.1.1.1
+            if "+IPADDR:" in response:
+                parts = response.split(":")
+                if len(parts) >= 2:
+                    ip = parts[1].strip().split()[0]
+                    if ip and "." in ip and ip != "0.0.0.0":
+                        return ip
+        except Exception:
+            pass
+
+        # Method 2: AT+CGPADDR (standard)
+        try:
+            response = self.send_at("AT+CGPADDR=1", timeout=3000)
+            # Response: +CGPADDR: 1,"10.1.1.1"
+            if "+CGPADDR:" in response:
+                start = response.find('"')
+                if start != -1:
+                    end = response.find('"', start + 1)
+                    if end != -1:
+                        ip = response[start + 1 : end].strip()
+                        if ip and "." in ip and ip != "0.0.0.0":
+                            return ip
+        except Exception:
+            pass
+
+        # Method 3: AT+CGCONTRDP (detailed PDP context)
         try:
             response = self.send_at("AT+CGCONTRDP=1", timeout=3000)
-            # Response format: +CGCONTRDP: 1,5,"internet","10.1.1.1","8.8.8.8"
+            # Response: +CGCONTRDP: 1,5,"internet","","10.1.1.1",...
             if "+CGCONTRDP:" in response:
-                parts = response.split(",")
-                if len(parts) >= 3:
-                    # Extract IP from the third part (removing quotes)
-                    ip = parts[2].strip().strip('"')
-                    return ip
-        except Exception as e:
-            self._log(f"Failed to get IP: {e}")
+                import re
+
+                quoted = re.findall(r'"([^"]*)"', response)
+                for val in quoted:
+                    if val and "." in val and any(c.isdigit() for c in val):
+                        parts = val.split(".")
+                        if len(parts) == 4 and all(p.isdigit() for p in parts):
+                            if val != "0.0.0.0":
+                                return val
+        except Exception:
+            pass
+
         return None
 
     def disconnect_lte(self) -> bool:

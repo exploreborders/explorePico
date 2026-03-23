@@ -238,6 +238,7 @@ _gps_available = False
 
 # Time sync state
 time_synced = False
+_cached_broker_ip = None  # Cache last known broker IP
 
 
 # -----------------------------------------------------------------------------
@@ -557,6 +558,73 @@ def create_mqtt_client() -> MQTTClient:
     return client
 
 
+def diagnose_mqtt_connection() -> None:
+    """Resolve MQTT broker IP via DuckDNS API and test TCP connection.
+
+    Tests basic internet connectivity first, then resolves broker IP.
+    """
+    global _cached_broker_ip
+
+    log("DIAG", "Testing network connectivity...")
+
+    # Test 1: Basic internet connectivity (Google DNS)
+    try:
+        import socket
+
+        log("DIAG", "Testing connection to 8.8.8.8:443...")
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(10)
+        s.connect(("8.8.8.8", 443))
+        log("DIAG", "Internet connectivity OK!")
+        s.close()
+    except Exception as e:
+        log("DIAG", f"Internet test failed: {e}")
+        log("DIAG", "LTE connection has no internet access")
+        return
+
+    # Test 2: Resolve broker IP via DuckDNS API
+    log("DIAG", "Resolving broker IP via DuckDNS API...")
+
+    ip = None
+
+    try:
+        import urequests
+
+        subdomain = MQTT_BROKER.replace(".duckdns.org", "")
+        url = f"https://www.duckdns.org/update?domains={subdomain}&token=&verbose=true"
+
+        response = urequests.get(url, timeout=15)
+        if response.status_code == 200:
+            lines = response.text.strip().split("\n")
+            if len(lines) >= 2 and lines[0] == "OK":
+                ip = lines[1].strip()
+                _cached_broker_ip = ip
+                log("DIAG", f"Broker IP: {ip}")
+        response.close()
+    except Exception as e:
+        log("DIAG", f"DuckDNS API failed: {e}")
+
+    if not ip:
+        log("DIAG", "Cannot resolve broker IP")
+        return
+
+    # Test 3: TCP Connection to MQTT broker
+    try:
+        import socket
+
+        log("DIAG", f"Testing TCP to {ip}:{MQTT_PORT}...")
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(15)
+        s.connect((ip, MQTT_PORT))
+        log("DIAG", "TCP connection OK!")
+        s.close()
+    except Exception as e:
+        log("DIAG", f"TCP failed: {e}")
+        return
+
+    log("DIAG", "Network OK - MQTT should connect")
+
+
 def connect_mqtt() -> bool:
     """Connect to MQTT broker and set up subscriptions."""
     global mqtt_client
@@ -565,6 +633,9 @@ def connect_mqtt() -> bool:
     blink_pattern("10")
 
     try:
+        # Run diagnostics first
+        diagnose_mqtt_connection()
+
         # Small delay to ensure network is fully established
         time.sleep(2)
 
