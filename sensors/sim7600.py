@@ -440,6 +440,29 @@ class SIM7600:
         response = self.send_at("AT+CGACT=1,1", timeout=10000)
         return "OK" in response
 
+    def open_network(self) -> bool:
+        """Open network/socket service (required for TCP/IP).
+
+        Returns:
+            True if successful
+        """
+        self._log("Opening network service...")
+        response = self.send_at("AT+NETOPEN", timeout=15000)
+        if "OK" in response or "+NETOPEN:" in response:
+            self._log("Network service opened")
+            return True
+        self._log(f"Network open failed: {response[:30]}")
+        return False
+
+    def close_network(self) -> bool:
+        """Close network/socket service.
+
+        Returns:
+            True if successful
+        """
+        response = self.send_at("AT+NETCLOSE", timeout=10000)
+        return "OK" in response
+
     def deactivate_pdp(self) -> bool:
         """Deactivate PDP context.
 
@@ -508,18 +531,25 @@ class SIM7600:
             self._log("Failed to activate PDP")
             return False
 
-        # Verify PDP activation
-        self._log("Verifying PDP context...")
-        pdp_response = self.send_at("AT+CGACT?", timeout=3000)
-        self._log(f"PDP status: {pdp_response[:50]}")
+        # Open network service (required for TCP/IP operations)
+        time.sleep(2)
+        if not self.open_network():
+            self._log("Failed to open network service")
+            return False
 
-        # Get and log IP address
-        self._log("Getting IP address...")
-        ip_addr = self.get_ip_address()
-        if ip_addr:
-            self._log(f"LTE IP: {ip_addr}")
-        else:
-            self._log("No IP address received")
+        # Wait for IP address to be assigned (can take a few seconds)
+        self._log("Waiting for IP address...")
+        ip_addr = None
+        for attempt in range(5):
+            time.sleep(2)
+            ip_addr = self.get_ip_address()
+            if ip_addr:
+                self._log(f"LTE IP: {ip_addr} (after {attempt + 1} attempts)")
+                break
+            self._log(f"IP attempt {attempt + 1}/5 failed, retrying...")
+
+        if not ip_addr:
+            self._log("No IP address received after 5 attempts")
 
         self.lte_connected = True
         self._log("LTE connected successfully")
@@ -533,48 +563,56 @@ class SIM7600:
         Returns:
             IP address string or None
         """
-        # Method 1: AT+IPADDR (SIM7600 specific, simpler)
+        # Method 1: AT+IPADDR (SIM7600 specific, requires AT+NETOPEN first)
         try:
             response = self.send_at("AT+IPADDR", timeout=3000)
-            # Response: +IPADDR: 10.1.1.1
+            # Response: +IPADDR: 10.71.155.118
             if "+IPADDR:" in response:
-                parts = response.split(":")
-                if len(parts) >= 2:
-                    ip = parts[1].strip().split()[0]
-                    if ip and "." in ip and ip != "0.0.0.0":
-                        return ip
+                for line in response.split("\n"):
+                    if "+IPADDR:" in line:
+                        parts = line.split(":")
+                        if len(parts) >= 2:
+                            ip = parts[1].strip()
+                            if ip and "." in ip and ip != "0.0.0.0":
+                                return ip
         except Exception:
             pass
 
-        # Method 2: AT+CGPADDR (standard)
+        # Method 2: AT+CGPADDR (standard, most reliable)
         try:
             response = self.send_at("AT+CGPADDR=1", timeout=3000)
-            # Response: +CGPADDR: 1,"10.1.1.1"
+            # Response: +CGPADDR: 1,10.126.84.47 (NO quotes!)
             if "+CGPADDR:" in response:
-                start = response.find('"')
-                if start != -1:
-                    end = response.find('"', start + 1)
-                    if end != -1:
-                        ip = response[start + 1 : end].strip()
-                        if ip and "." in ip and ip != "0.0.0.0":
-                            return ip
+                # Find the line with the response
+                for line in response.split("\n"):
+                    if "+CGPADDR:" in line:
+                        parts = line.split(",")
+                        if len(parts) >= 2:
+                            ip = parts[1].strip()
+                            if ip and "." in ip and ip != "0.0.0.0":
+                                return ip
         except Exception:
             pass
 
-        # Method 3: AT+CGCONTRDP (detailed PDP context)
+        # Method 2: AT+CGCONTRDP (detailed PDP context)
         try:
             response = self.send_at("AT+CGCONTRDP=1", timeout=3000)
-            # Response: +CGCONTRDP: 1,5,"internet","","10.1.1.1",...
+            # Response: +CGCONTRDP: 1,5,"internet",...,10.1.1.1,...
             if "+CGCONTRDP:" in response:
-                import re
-
-                quoted = re.findall(r'"([^"]*)"', response)
-                for val in quoted:
-                    if val and "." in val and any(c.isdigit() for c in val):
-                        parts = val.split(".")
-                        if len(parts) == 4 and all(p.isdigit() for p in parts):
-                            if val != "0.0.0.0":
-                                return val
+                for line in response.split("\n"):
+                    if "+CGCONTRDP:" in line:
+                        # Find all comma-separated values
+                        parts = line.split(",")
+                        for part in parts:
+                            part = part.strip().strip('"')
+                            if part and "." in part and any(c.isdigit() for c in part):
+                                # Check if it looks like an IP
+                                ip_parts = part.split(".")
+                                if len(ip_parts) == 4 and all(
+                                    p.isdigit() for p in ip_parts
+                                ):
+                                    if part != "0.0.0.0":
+                                        return part
         except Exception:
             pass
 
