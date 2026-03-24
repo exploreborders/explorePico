@@ -70,6 +70,18 @@ except Exception:
     sync_time = None
     get_lte_manager = None
 
+# Import SIM7600MQTT for LTE connections
+if LTE_AVAILABLE:
+    try:
+        from sim7600_mqtt import SIM7600MQTT
+
+        log("LTE", "SIM7600MQTT imported successfully")
+    except Exception as e:
+        log("LTE", f"SIM7600MQTT import failed: {e}")
+        SIM7600MQTT = None
+else:
+    SIM7600MQTT = None
+
 from config import (
     WIFI_SSID,
     WIFI_PASSWORD,
@@ -540,8 +552,45 @@ def on_message(topic: bytes, msg: bytes) -> None:
 # -----------------------------------------------------------------------------
 # MQTT CONNECTION
 # -----------------------------------------------------------------------------
-def create_mqtt_client() -> MQTTClient:
-    """Create and configure MQTT client."""
+def create_mqtt_client():
+    """Create and configure MQTT client.
+
+    Uses SIM7600MQTT for LTE connections, umqtt.simple for WiFi.
+    """
+    global connection_type
+
+    # Check actual connection state (don't rely on connection_type variable)
+    is_lte = LTE_AVAILABLE and is_lte_connected()
+    is_wifi = is_connected()
+
+    log("MQTT", f"Connection state: LTE={is_lte}, WiFi={is_wifi}")
+    log("MQTT", f"SIM7600MQTT available: {SIM7600MQTT is not None}")
+
+    # Use SIM7600's built-in MQTT for LTE connections
+    if is_lte and SIM7600MQTT and get_lte_manager:
+        lte_mgr = get_lte_manager()
+        log("MQTT", f"LTE manager: {lte_mgr is not None}")
+        if lte_mgr:
+            sim = lte_mgr.sim
+            log("MQTT", "Using SIM7600 MQTT client (non-SSL for LTE)")
+            connection_type = "LTE"
+            # Use plain MQTT port 1883 for LTE (no SSL support)
+            client = SIM7600MQTT(
+                sim=sim,
+                client_id=MQTT_CLIENT_ID,
+                server=MQTT_BROKER,
+                port=1883,  # Plain MQTT port
+                user=MQTT_USER,
+                password=MQTT_PASSWORD,
+                keepalive=60,
+                ssl=False,
+            )
+            client.set_callback(on_message)
+            return client
+
+    # Use umqtt.simple for WiFi connections (supports SSL)
+    log("MQTT", "Using umqtt.simple client")
+    connection_type = "WiFi" if is_wifi else "offline"
     client = MQTTClient(
         client_id=MQTT_CLIENT_ID,
         server=MQTT_BROKER,
@@ -559,70 +608,89 @@ def create_mqtt_client() -> MQTTClient:
 
 
 def diagnose_mqtt_connection() -> None:
-    """Resolve MQTT broker IP via DuckDNS API and test TCP connection.
+    """Test MQTT connectivity using SIM7600 AT commands.
 
-    Tests basic internet connectivity first, then resolves broker IP.
+    Tests basic TCP connection via AT+CIPOPEN to verify network works.
     """
     global _cached_broker_ip
 
-    log("DIAG", "Testing network connectivity...")
+    log("DIAG", "Testing network connectivity via AT commands...")
 
-    # Test 1: Basic internet connectivity (Google DNS)
-    try:
-        import socket
-
-        log("DIAG", "Testing connection to 8.8.8.8:443...")
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.settimeout(10)
-        s.connect(("8.8.8.8", 443))
-        log("DIAG", "Internet connectivity OK!")
-        s.close()
-    except Exception as e:
-        log("DIAG", f"Internet test failed: {e}")
-        log("DIAG", "LTE connection has no internet access")
+    # Get LTE manager
+    if not LTE_AVAILABLE or not get_lte_manager:
+        log("DIAG", "LTE not available")
         return
 
-    # Test 2: Resolve broker IP via DuckDNS API
-    log("DIAG", "Resolving broker IP via DuckDNS API...")
+    lte_mgr = get_lte_manager()
+    if not lte_mgr:
+        log("DIAG", "No LTE manager")
+        return
 
-    ip = None
+    sim = lte_mgr.sim
+    if not sim:
+        log("DIAG", "No SIM7600 instance")
+        return
 
-    try:
-        import urequests
-
-        subdomain = MQTT_BROKER.replace(".duckdns.org", "")
-        url = f"https://www.duckdns.org/update?domains={subdomain}&token=&verbose=true"
-
-        response = urequests.get(url, timeout=15)
-        if response.status_code == 200:
-            lines = response.text.strip().split("\n")
-            if len(lines) >= 2 and lines[0] == "OK":
-                ip = lines[1].strip()
-                _cached_broker_ip = ip
-                log("DIAG", f"Broker IP: {ip}")
-        response.close()
-    except Exception as e:
-        log("DIAG", f"DuckDNS API failed: {e}")
+    # Resolve hostname
+    ip = _cached_broker_ip
+    if not ip:
+        log("DIAG", "Resolving hostname via AT+CDNSGIP...")
+        try:
+            dns_resp = sim.send_at(f'AT+CDNSGIP="{MQTT_BROKER}"', timeout=15000)
+            if "+CDNSGIP:" in dns_resp:
+                for line in dns_resp.split("\n"):
+                    if "+CDNSGIP:" in line:
+                        parts = line.split(",")
+                        if len(parts) >= 3:
+                            ip_str = parts[-1].strip()
+                            ip_str = ip_str.split('"')[1] if '"' in ip_str else ip_str
+                            ip_str = "".join(
+                                c for c in ip_str if c.isdigit() or c == "."
+                            )
+                            if ip_str and "." in ip_str:
+                                ip = ip_str
+                                _cached_broker_ip = ip
+        except Exception as e:
+            log("DIAG", f"DNS failed: {e}")
 
     if not ip:
-        log("DIAG", "Cannot resolve broker IP")
+        log("DIAG", "Cannot resolve hostname")
         return
 
-    # Test 3: TCP Connection to MQTT broker
+    log("DIAG", f"Resolved to: {ip}")
+
+    # Test TCP connection via AT+CIPOPEN (use port 1883 for plain MQTT)
+    mqtt_port = 1883  # Plain MQTT port for LTE
+    log("DIAG", f"Testing TCP to {ip}:{mqtt_port} via AT+CIPOPEN...")
     try:
-        import socket
+        # Close any existing connection first
+        sim.send_at("AT+CIPCLOSE=0", timeout=3000)
+        time.sleep(0.5)
 
-        log("DIAG", f"Testing TCP to {ip}:{MQTT_PORT}...")
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.settimeout(15)
-        s.connect((ip, MQTT_PORT))
-        log("DIAG", "TCP connection OK!")
-        s.close()
+        # Open TCP connection
+        cmd = f'AT+CIPOPEN=0,"TCP","{ip}",{mqtt_port}'
+        resp = sim.send_at(cmd, timeout=15000)
+        log("DIAG", f"CIPOPEN resp: {resp[:60]}")
+
+        if "OK" in resp:
+            # Wait for connection to establish
+            time.sleep(2)
+            log("DIAG", "TCP connection OK!")
+        elif "ERROR" in resp:
+            log("DIAG", "TCP connection failed (ERROR)")
+        else:
+            # Check for error code
+            if "+CIPOPEN:" in resp:
+                parts = resp.split(",")
+                if len(parts) >= 2:
+                    err = parts[1].strip().split()[0]
+                    log("DIAG", f"TCP connection error: {err}")
+
+        # Close connection
+        sim.send_at("AT+CIPCLOSE=0", timeout=5000)
+        time.sleep(0.5)
     except Exception as e:
-        log("DIAG", f"TCP failed: {e}")
-        return
-
-    log("DIAG", "Network OK - MQTT should connect")
+        log("DIAG", f"TCP test failed: {e}")
 
 
 def connect_mqtt() -> bool:
@@ -640,7 +708,13 @@ def connect_mqtt() -> bool:
         time.sleep(2)
 
         mqtt_client = create_mqtt_client()
-        mqtt_client.connect()
+
+        # Check if connect() succeeds
+        if not mqtt_client.connect():
+            log("MQTT", "Connection failed!")
+            mqtt_client = None
+            return False
+
         time.sleep(1)  # Wait for SSL handshake to complete
         mqtt_client.publish(TOPIC_AVAILABILITY, "online", retain=True)
         log("MQTT", "Connected!")

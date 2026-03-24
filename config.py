@@ -33,7 +33,7 @@ Secrets:
 """
 
 # MQTT Configuration
-MQTT_SSL = True  # Enable SSL (port 8883 - works with LTE)
+MQTT_SSL = True
 
 # MQTT Topics
 TOPIC_LED_COMMAND = "homeassistant/pico/switch/led/set"

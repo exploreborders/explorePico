@@ -220,6 +220,47 @@ class SIM7600:
             self._log(f"AT send error: {e}")
             return "ERROR"
 
+    def send_data(self, data: str, timeout: int = 5000) -> str:
+        """Send raw data (for MQTT topic/payload input).
+
+        Used after AT commands that expect data input (e.g., AT+CMQTTTOPIC).
+
+        Args:
+            data: Data to send
+            timeout: Timeout in milliseconds
+
+        Returns:
+            Response string
+        """
+        if not self.uart:
+            return "ERROR"
+
+        try:
+            self.uart.write(data.encode())
+            time.sleep(0.1)
+            self.uart.write(b"\r\n")
+
+            start = time.ticks_ms()
+            response = ""
+
+            while time.ticks_diff(time.ticks_ms(), start) < timeout:
+                if self.uart.any():
+                    char = self.uart.read(1)
+                    if char:
+                        response += char.decode("utf-8", "ignore")
+
+                if "OK" in response:
+                    return response.strip()
+
+                if "ERROR" in response:
+                    return "ERROR"
+
+            return response.strip() if response else "ERROR"
+
+        except Exception as e:
+            self._log(f"Data send error: {e}")
+            return "ERROR"
+
     # -------------------------------------------------------------------------
     # LTE / Network Functions
     # -------------------------------------------------------------------------
