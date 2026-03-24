@@ -56,7 +56,6 @@ try:
     from lte_utils import (
         is_lte_connected,
         get_gps_location,
-        get_gps_fix_status,
         get_signal_info,
         get_network_info,
         init_gps,
@@ -145,11 +144,7 @@ from config import (
     TOPIC_GPS_LONGITUDE,
     TOPIC_GPS_ALTITUDE,
     TOPIC_GPS_SPEED,
-    TOPIC_GPS_SATELLITES,
-    TOPIC_GPS_PDOP,
-    TOPIC_GPS_COURSE,
     TOPIC_GPS_INTERVAL_SET,
-    TOPIC_GPS_FIX_STATUS,
     TOPIC_DEVICE_TRACKER,
     LTE_UART_ID,
     LTE_TX_PIN,
@@ -361,21 +356,12 @@ CURRENT_STATE_TOPICS = [
 ]
 
 
-def _get_current_read_func(index: int):
-    """Create closure for current sensor reading with offset."""
-
-    def read_current():
-        return _read_current_with_offset(index)
-
-    return read_current
-
-
 if ENABLE_ACS37030 and current_sensors:
     for i, sensor_manager in enumerate(current_sensors):
         SENSOR_REGISTRY.append(
             {
                 "name": f"current_{i + 1}",
-                "read_func": _get_current_read_func(i),
+                "read_func": lambda idx=i: _read_current_with_offset(idx),
                 "state_topic": CURRENT_STATE_TOPICS[i],
                 "sensor_manager": sensor_manager,
                 "needs_unavailable": True,
@@ -701,8 +687,9 @@ def connect_mqtt() -> bool:
     blink_pattern("10")
 
     try:
-        # Run diagnostics first
-        diagnose_mqtt_connection()
+        # Run diagnostics for LTE connections only
+        if connection_type == "LTE":
+            diagnose_mqtt_connection()
 
         # Small delay to ensure network is fully established
         time.sleep(2)
@@ -710,8 +697,13 @@ def connect_mqtt() -> bool:
         mqtt_client = create_mqtt_client()
 
         # Check if connect() succeeds
-        if not mqtt_client.connect():
-            log("MQTT", "Connection failed!")
+        try:
+            if not mqtt_client.connect():
+                log("MQTT", "Connection failed!")
+                mqtt_client = None
+                return False
+        except Exception as e:
+            log("MQTT", f"Connection error: {e}")
             mqtt_client = None
             return False
 
@@ -854,31 +846,12 @@ def handle_gps_publish() -> None:
 
             mqtt_publish(TOPIC_GPS_ALTITUDE, str(data.get("altitude", 0)))
             mqtt_publish(TOPIC_GPS_SPEED, str(data.get("speed", 0)))
-            mqtt_publish(TOPIC_GPS_COURSE, str(data.get("course", 0)))
-
-            # Satellites (may be None if CGNSINFO not available)
-            satellites = data.get("satellites")
-            mqtt_publish(
-                TOPIC_GPS_SATELLITES, str(satellites if satellites is not None else "")
-            )
-
-            # PDOP * 5 = approximate accuracy in meters (may be None)
-            pdop = data.get("pdop")
-            if pdop is not None:
-                mqtt_publish(TOPIC_GPS_PDOP, str(round(pdop * 5, 1)))
-            else:
-                mqtt_publish(TOPIC_GPS_PDOP, "")
-
-            fix_status, _ = get_gps_fix_status()
-            mqtt_publish(TOPIC_GPS_FIX_STATUS, str(fix_status))
 
             # Device tracker (raw numeric values for HA)
-            pdop = data.get("pdop")
             tracker_payload = ujson.dumps(
                 {
                     "latitude": data.get("latitude", 0),
                     "longitude": data.get("longitude", 0),
-                    "gps_accuracy": round(pdop * 5, 1) if pdop else 0,
                     "altitude": data.get("altitude", 0),
                     "speed": data.get("speed", 0),
                 }
@@ -888,16 +861,27 @@ def handle_gps_publish() -> None:
 
 
 def run_main_loop() -> None:
-    """Run the main MQTT loop."""
+    """Run the main MQTT loop.
+
+    Prioritizes incoming messages over outgoing data.
+    """
     global mqtt_client
 
     try:
+        # ALWAYS check for incoming messages first (highest priority)
         handle_mqtt_message()
-        handle_sensor_publish()
-        handle_connection_type_publish()
-        handle_lte_signal_publish()
-        handle_lte_network_publish()
-        handle_gps_publish()
+
+        # Only send data if no incoming messages are pending
+        if not mqtt_client._pending_messages:
+            handle_sensor_publish()
+            handle_connection_type_publish()
+            handle_lte_signal_publish()
+            handle_lte_network_publish()
+            handle_gps_publish()
+
+        # Check again after sending
+        handle_mqtt_message()
+
         time.sleep(MQTT_LOOP_DELAY)
 
     except OSError as e:

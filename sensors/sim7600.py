@@ -831,216 +831,11 @@ class SIM7600:
         self._log("GPS enable failed")
         return False
 
-    def get_gps_fix_status(self) -> tuple[int, int]:
-        """Get GPS fix status.
-
-        Tries AT+CGNSFPS first, falls back to checking AT+CGNSINFO response.
-
-        Returns:
-            Tuple of (fix_status, satellites)
-            - fix_status: 0=no fix, 1=fix acquired
-            - satellites: Number of satellites used
-        """
-        # Try CGNSFPS first
-        response = self.send_at("AT+CGNSFPS?", timeout=3000)
-
-        if "+CGNSFPS:" in response:
-            try:
-                start = response.find("+CGNSFPS:") + 10
-                data = response[start:].strip()
-                parts = data.split(",")
-                fix = int(parts[0].strip())
-                sats = int(parts[1].strip()) if len(parts) > 1 else 0
-                return (fix, sats)
-            except (ValueError, IndexError):
-                pass
-
-        # Fallback: check CGNSINFO response for fix status
-        response = self.send_at("AT+CGNSINFO", timeout=3000)
-        if "+CGNSINF:" in response:
-            try:
-                data_start = response.rfind(":") + 1
-                data = response[data_start:].strip()
-                parts = data.split(",")
-
-                if len(parts) > 2:
-                    run = parts[0].strip()
-                    fix = parts[1].strip()
-                    if run == "1" and fix == "1":
-                        # Count satellites from visible field if available
-                        sats = 0
-                        if len(parts) > 13 and parts[13].strip():
-                            try:
-                                sats = int(parts[13].strip())
-                            except ValueError:
-                                pass
-                        return (1, sats)
-            except (ValueError, IndexError):
-                pass
-
-        return (0, 0)
-
-    def get_gps_location_cgnsinfo(self) -> dict | None:
-        """Get GPS data using AT+CGNSINFO (primary, rich data).
-
-        AT+CGNSINFO returns:
-        <run>,<fix>,<utc>,<lat>,<lat_dir>,<lon>,<lon_dir>,
-        <alt>,<spd>,<course>,<pdop>,<hdop>,<vdop>,<sats>,...
-
-        Returns:
-            Dict with full GPS data or None.
-        """
-        response = self.send_at("AT+CGNSINFO", timeout=3000)
-
-        if "+CGNSINF:" not in response:
-            return None
-
-        try:
-            data_start = response.rfind(":") + 1
-            data = response[data_start:].strip()
-
-            if not data or data == "":
-                return None
-
-            parts = data.split(",")
-
-            # Debug: log raw response
-            self._log(f"CGNSINFO raw: {data[:100]}")
-
-            # Check run and fix status
-            run_status = parts[0].strip() if len(parts) > 0 else ""
-            fix_status = parts[1].strip() if len(parts) > 1 else ""
-
-            if run_status != "1" or fix_status != "1":
-                return None
-
-            # Parse latitude
-            lat_raw = parts[3].strip() if len(parts) > 3 else ""
-            lat_dir = parts[4].strip() if len(parts) > 4 else ""
-
-            if not lat_raw or not lat_dir:
-                return None
-
-            lat = self._convert_nmea_lat(lat_raw, lat_dir)
-
-            # Parse longitude
-            lon_raw = parts[5].strip() if len(parts) > 5 else ""
-            lon_dir = parts[6].strip() if len(parts) > 6 else ""
-
-            if not lon_raw or not lon_dir:
-                return None
-
-            lon = self._convert_nmea_lon(lon_raw, lon_dir)
-
-            # Validate coordinates
-            if not (-90 <= lat <= 90 and -180 <= lon <= 180):
-                return None
-
-            # Parse altitude (meters)
-            alt = 0.0
-            if len(parts) > 7 and parts[7].strip():
-                try:
-                    alt = float(parts[7].strip())
-                except ValueError:
-                    pass
-
-            # Parse speed and course
-            # CGNSINFO format: <alt>,<speed>,<course>,<pdop>,...
-            speed = 0.0
-            course = 0.0
-            if len(parts) > 9:
-                try:
-                    speed = float(parts[8].strip()) if parts[8].strip() else 0.0
-                    course = float(parts[9].strip()) if parts[9].strip() else 0.0
-                except (ValueError, IndexError):
-                    pass
-
-            # Parse PDOP
-            pdop = 0.0
-            if len(parts) > 10 and parts[10].strip():
-                try:
-                    pdop = float(parts[10].strip())
-                except ValueError:
-                    pass
-
-            # Parse HDOP
-            hdop = 0.0
-            if len(parts) > 11 and parts[11].strip():
-                try:
-                    hdop = float(parts[11].strip())
-                except ValueError:
-                    pass
-
-            # Parse VDOP
-            vdop = 0.0
-            if len(parts) > 12 and parts[12].strip():
-                try:
-                    vdop = float(parts[12].strip())
-                except ValueError:
-                    pass
-
-            # Parse visible satellites
-            sats_visible = 0
-            if len(parts) > 13 and parts[13].strip():
-                try:
-                    sats_visible = int(parts[13].strip())
-                except ValueError:
-                    pass
-
-            # Parse GPS/GLONASS/BeiDou satellites (used)
-            gps_svs = 0
-            if len(parts) > 14 and parts[14].strip():
-                try:
-                    gps_svs = int(parts[14].strip())
-                except ValueError:
-                    pass
-
-            glonass_svs = 0
-            if len(parts) > 15 and parts[15].strip():
-                try:
-                    glonass_svs = int(parts[15].strip())
-                except ValueError:
-                    pass
-
-            beidou_svs = 0
-            if len(parts) > 16 and parts[16].strip():
-                try:
-                    beidou_svs = int(parts[16].strip())
-                except ValueError:
-                    pass
-
-            self._log(f"GPS: lat={lat}, lon={lon}, speed={speed}, course={course}")
-
-            return {
-                "latitude": lat,
-                "longitude": lon,
-                "altitude": round(alt, 1),
-                "speed": round(speed, 1),
-                "course": round(course, 1),
-                "pdop": round(pdop, 1),
-                "hdop": round(hdop, 1),
-                "vdop": round(vdop, 1),
-                "satellites": sats_visible,
-                "satellites_gps": gps_svs,
-                "satellites_glonass": glonass_svs,
-                "satellites_beidou": beidou_svs,
-                "source": "CGNSINFO",
-            }
-
-        except Exception as e:
-            self._log(f"CGNSINFO parse error: {e}")
-            return None
-
     def get_gps_location_cgpsinfo(self) -> dict | None:
-        """Get GPS data using AT+CGPSINFO (fallback, simpler data).
-
-        AT+CGPSINFO returns:
-        <lat>,<N/S>,<lon>,<E/W>,<date>,<UTC time>,<alt>,<speed>,<course>
-
-        Note: speed is in knots, we convert to km/h.
+        """Get GPS data using AT+CGPSINFO.
 
         Returns:
-            Dict with GPS data or None.
+            Dict with lat, lon, alt, speed or None.
         """
         response = self.send_at("AT+CGPSINFO", timeout=3000)
 
@@ -1182,123 +977,14 @@ class SIM7600:
             self._log(f"CGPSINFO parse error: {e}")
             return None
 
-    def get_gnss_info(self) -> dict | None:
-        """Get GPS data - CGPSINFO for basic data, CGNSINFO for accuracy data.
-
-        Strategy:
-        - CGPSINFO: Primary source for lat, lon, date, time, alt, speed, course
-        - CGNSINFO: Supplement with PDOP, HDOP, VDOP, satellites (if available)
-
-        Returns:
-            Dict with full GPS data or None.
-        """
-        # First, get basic data from CGPSINFO
-        basic = self.get_gps_location_cgpsinfo()
-        if not basic:
-            return None
-
-        # Try to get extra accuracy data from CGNSINFO
-        extra = self.get_gps_accuracy_from_cgnsinfo()
-        if extra:
-            # Merge extra data into basic
-            basic.update(extra)
-
-        return basic
-
-    def get_gps_accuracy_from_cgnsinfo(self) -> dict | None:
-        """Get accuracy data from AT+CGNSINFO.
-
-        CGNSINFO provides: PDOP, HDOP, VDOP, satellites, GNSS satellite counts
-
-        Returns:
-            Dict with accuracy data or empty dict if not available.
-        """
-        response = self.send_at("AT+CGNSINFO", timeout=3000)
-
-        if "+CGNSINF:" not in response:
-            return None
-
-        try:
-            data_start = response.rfind(":") + 1
-            data = response[data_start:].strip()
-
-            if not data or data == "":
-                return None
-
-            parts = data.split(",")
-
-            # Check run and fix status
-            run_status = parts[0].strip() if len(parts) > 0 else ""
-            fix_status = parts[1].strip() if len(parts) > 1 else ""
-
-            if run_status != "1" or fix_status != "1":
-                return None
-
-            result = {}
-
-            # Parse PDOP (index 10)
-            if len(parts) > 10 and parts[10].strip():
-                try:
-                    result["pdop"] = round(float(parts[10].strip()), 1)
-                except ValueError:
-                    pass
-
-            # Parse HDOP (index 11)
-            if len(parts) > 11 and parts[11].strip():
-                try:
-                    result["hdop"] = round(float(parts[11].strip()), 1)
-                except ValueError:
-                    pass
-
-            # Parse VDOP (index 12)
-            if len(parts) > 12 and parts[12].strip():
-                try:
-                    result["vdop"] = round(float(parts[12].strip()), 1)
-                except ValueError:
-                    pass
-
-            # Parse visible satellites (index 13)
-            if len(parts) > 13 and parts[13].strip():
-                try:
-                    result["satellites"] = int(parts[13].strip())
-                except ValueError:
-                    pass
-
-            # Parse GPS satellites (index 14)
-            if len(parts) > 14 and parts[14].strip():
-                try:
-                    result["satellites_gps"] = int(parts[14].strip())
-                except ValueError:
-                    pass
-
-            # Parse GLONASS satellites (index 15)
-            if len(parts) > 15 and parts[15].strip():
-                try:
-                    result["satellites_glonass"] = int(parts[15].strip())
-                except ValueError:
-                    pass
-
-            # Parse BeiDou satellites (index 16)
-            if len(parts) > 16 and parts[16].strip():
-                try:
-                    result["satellites_beidou"] = int(parts[16].strip())
-                except ValueError:
-                    pass
-
-            return result
-
-        except Exception as e:
-            self._log(f"CGNSINFO accuracy parse error: {e}")
-            return None
-
     def get_gps_location(self, timeout_ms: int = 5000) -> dict | None:
-        """Get GPS location using AT+CGNSINFO (CGNS stack).
+        """Get GPS location.
 
         Args:
             timeout_ms: Maximum wait time for fix
 
         Returns:
-            Dict with lat, lon, alt, speed, satellites, pdop or None
+            Dict with lat, lon, alt, speed or None
         """
         if not self.gps_enabled:
             self.enable_gps()
@@ -1306,7 +992,7 @@ class SIM7600:
         start = time.ticks_ms()
 
         while time.ticks_diff(time.ticks_ms(), start) < timeout_ms:
-            result = self.get_gnss_info()
+            result = self.get_gps_location_cgpsinfo()
 
             if result:
                 lat = result.get("latitude", 0)
@@ -1551,13 +1237,3 @@ class SIM7600Manager:
             Dict with GPS data or None
         """
         return self.sim.get_gps_location(timeout_ms=timeout_ms)
-
-    def get_gps_fix_status(self) -> tuple[int, int]:
-        """Get GPS fix status.
-
-        Returns:
-            Tuple of (fix_status, satellites)
-            - fix_status: 0=no fix, 1=fix acquired
-            - satellites: Number of satellites used
-        """
-        return self.sim.get_gps_fix_status()

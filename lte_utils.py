@@ -201,20 +201,6 @@ def get_gps_location(timeout_ms: int = 2000) -> dict | None:
     return _lte_manager.get_gps_location(timeout_ms=timeout_ms)
 
 
-def get_gps_fix_status() -> tuple[int, int]:
-    """Get GPS fix status.
-
-    Returns:
-        Tuple of (fix_status, satellites)
-        - fix_status: 0=no fix, 1=fix acquired
-        - satellites: Number of satellites used
-    """
-    if not _lte_manager:
-        return (0, 0)
-
-    return _lte_manager.get_gps_fix_status()
-
-
 def get_signal_info() -> dict:
     """Get signal quality information.
 

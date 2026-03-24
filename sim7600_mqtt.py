@@ -163,6 +163,7 @@ class SIM7600MQTT:
         self._server_ip = None
         self._last_ping = 0
         self._packet_id = 1
+        self._pending_messages = []  # Buffer for incoming messages
 
     def _log(self, msg: str) -> None:
         print(f"[MQTT] {msg}")
@@ -179,7 +180,6 @@ class SIM7600MQTT:
 
         # Send CIPSEND command
         cmd = f"AT+CIPSEND=0,{len(data)}"
-        self._log(f"CIPSEND cmd: {cmd}")
         self.sim.uart.write(cmd.encode() + b"\r\n")
         time.sleep(0.3)
 
@@ -189,9 +189,7 @@ class SIM7600MQTT:
         while time.ticks_diff(time.ticks_ms(), start) < 5000:
             if self.sim.uart.any():
                 resp = self.sim.uart.read(200)
-                if resp:
-                    self._log(f"CIPSEND resp: {resp}")
-                if b">" in resp:
+                if resp and b">" in resp:
                     got_prompt = True
                     break
             time.sleep(0.1)
@@ -201,7 +199,6 @@ class SIM7600MQTT:
             return "ERROR: no prompt"
 
         # Send binary data immediately after prompt
-        self._log(f"Sending {len(data)} bytes of data")
         self.sim.uart.write(data)
         time.sleep(0.2)
 
@@ -213,18 +210,65 @@ class SIM7600MQTT:
                 chunk = self.sim.uart.read(200)
                 if chunk:
                     response += chunk
-                    self._log(f"Got data: {chunk}")
             # SIM7600 returns +CIPSEND: 0,49,49 instead of SEND OK
             if b"SEND OK" in response or b"+CIPSEND:" in response:
-                self._log("Data sent successfully!")
                 return "OK"
             if b"ERROR" in response or b"SEND FAIL" in response:
-                self._log(f"Send error: {response}")
+                self._log("Send error")
                 return "ERROR"
             time.sleep(0.1)
 
-        self._log(f"Timeout waiting for send confirmation, got: {response}")
+        self._log("Send timeout")
         return "TIMEOUT"
+
+    def _extract_incoming(self, data: bytes) -> None:
+        """Extract +IPD data from response and store for later processing.
+
+        Format: +IPD<length>\r\n<data>
+        """
+        while b"+IPD" in data:
+            ipd_pos = data.find(b"+IPD")
+            if ipd_pos < 0:
+                break
+
+            # Parse length after +IPD
+            length_str = b""
+            pos = ipd_pos + 4  # Skip "+IPD"
+            while pos < len(data) and data[pos : pos + 1].isdigit():
+                length_str += data[pos : pos + 1]
+                pos += 1
+
+            if not length_str:
+                # Skip this +IPD and continue
+                data = data[ipd_pos + 4 :]
+                continue
+
+            expected_length = int(length_str)
+
+            # Find \r\n after length
+            header_end = data.find(b"\r\n", pos)
+            if header_end < 0:
+                header_end = data.find(b"\n", pos)
+
+            if header_end < 0:
+                break
+
+            # Data starts after the header
+            data_start = header_end + 1
+            if data[data_start : data_start + 1] == b"\n":
+                data_start += 1
+
+            # Extract exactly the expected number of bytes
+            if data_start + expected_length <= len(data):
+                mqtt_data = data[data_start : data_start + expected_length]
+                if mqtt_data:
+                    self._log(f"Received +IPD ({expected_length} bytes)")
+                    self._pending_messages.append(mqtt_data)
+                # Continue with remaining data
+                data = data[data_start + expected_length :]
+            else:
+                # Not enough data yet
+                break
 
     def _resolve_ip(self) -> str | None:
         """Resolve hostname to IP using SIM7600 DNS."""
@@ -268,7 +312,6 @@ class SIM7600MQTT:
         # Open TCP connection
         cmd = f'AT+CIPOPEN=0,"TCP","{self._server_ip}",{self.port}'
         resp = self._send_at(cmd, timeout=15000)
-        self._log(f"CIPOPEN resp: {resp[:60]}")
 
         if "ERROR" in resp:
             self._log("TCP connection failed")
@@ -283,13 +326,12 @@ class SIM7600MQTT:
                     line = self.sim.uart.readline()
                     if line:
                         text = line.decode().strip()
-                        self._log(f"URC: {text[:40]}")
                         if "+CIPOPEN:" in text:
                             parts = text.split(",")
                             if len(parts) >= 2:
                                 err = parts[1].strip()
                                 if err == "0":
-                                    self._log("TCP connection established!")
+                                    self._log("TCP connected")
                                     break
                                 else:
                                     self._log(f"TCP error: {err}")
@@ -299,18 +341,12 @@ class SIM7600MQTT:
             time.sleep(0.5)
 
         # Build and send CONNECT packet
-        self._log(f"Client ID: {self.client_id}")
-        self._log(f"User: {self.user}, Password: {'***' if self.password else 'None'}")
         connect_packet = _build_connect(
             self.client_id,
             self.keepalive,
             self.user,
             self.password,
         )
-        self._log(
-            f"CONNECT packet ({len(connect_packet)} bytes): {connect_packet.hex()}"
-        )
-        self._log(f"Sending CONNECT ({len(connect_packet)} bytes)")
         result = self._send_data(connect_packet, timeout=10000)
         if result != "OK":
             self._log(f"Send failed: {result}")
@@ -351,49 +387,41 @@ class SIM7600MQTT:
         self._log("Connection assumed successful (check broker logs)")
         return True
 
-        # Wait for CONNACK
-        time.sleep(2)
-        connack = self._receive_data(timeout=10000)
-        if connack and len(connack) >= 4:
-            # Parse CONNACK
-            if connack[0] == (MQTT_CONNACK << 4):
-                return_code = connack[3]
-                if return_code == 0:
-                    self.connected = True
-                    self._last_ping = time.ticks_ms()
-                    self._log("Connected to MQTT broker!")
-                    return True
-                else:
-                    self._log(f"CONNACK error: {return_code}")
-            else:
-                self._log(f"Unexpected response: {connack.hex()}")
-        else:
-            self._log("No CONNACK received")
-
-        self._send_at("AT+CIPCLOSE=0", timeout=3000)
-        return False
-
     def _receive_data(self, timeout: int = 5000) -> bytes | None:
-        """Receive data via AT+CIPRXGET."""
-        # Check for data
-        resp = self._send_at("AT+CIPRXGET=2,0,1024", timeout=timeout)
-        if "+CIPRXGET:" not in resp:
-            return None
+        """Receive data from SIM7600.
 
-        # Parse response: +CIPRXGET: 2,0,len\r\n<data>
-        try:
-            lines = resp.split("\n")
-            for i, line in enumerate(lines):
-                if "+CIPRXGET:" in line:
-                    # Data is on next line(s)
-                    data = ""
-                    for j in range(i + 1, len(lines)):
-                        if "OK" in lines[j]:
-                            break
-                        data += lines[j]
-                    return data.strip().encode("utf-8")
-        except Exception:
-            pass
+        Handles the +IPD format for incoming data.
+        Format: RECV FROM:ip:port\r\n+IPD<length>\r\n<data>
+        """
+        start = time.ticks_ms()
+        response = b""
+
+        while time.ticks_diff(time.ticks_ms(), start) < timeout:
+            if self.sim.uart.any():
+                chunk = self.sim.uart.read(200)
+                if chunk:
+                    response += chunk
+
+            # Check if we have +IPD data
+            if b"+IPD" in response:
+                # Find the +IPD marker
+                ipd_pos = response.find(b"+IPD")
+                if ipd_pos >= 0:
+                    # Find the data after +IPD<len>\r\n
+                    data_start = response.find(b"\n", ipd_pos)
+                    if data_start >= 0:
+                        data_start += 1  # Skip the newline
+                        # The MQTT packet data starts here
+                        mqtt_data = response[data_start:]
+                        # Remove any trailing OK or other AT responses
+                        if b"OK" in mqtt_data:
+                            mqtt_data = mqtt_data[: mqtt_data.find(b"OK")]
+                        mqtt_data = mqtt_data.strip()
+                        if mqtt_data:
+                            return mqtt_data
+
+            time.sleep(0.05)
+
         return None
 
     def publish(self, topic: str, msg: str, retain: bool = False, qos: int = 0) -> bool:
@@ -430,7 +458,10 @@ class SIM7600MQTT:
         self.callback = callback
 
     def check_msg(self) -> None:
-        """Check for incoming messages."""
+        """Check for incoming messages.
+
+        Uses AT+CIPRXGET to explicitly request incoming data from SIM7600.
+        """
         if not self.connected:
             return
 
@@ -440,20 +471,97 @@ class SIM7600MQTT:
             self._send_data(_build_pingreq(), timeout=3000)
             self._last_ping = now
 
-        # Try to receive data
-        data = self._receive_data(timeout=100)
-        if data and len(data) > 2:
-            # Check if it's a PUBLISH packet
-            if (data[0] >> 4) == MQTT_PUBLISH:
+        # Method 1: Check UART buffer for unsolicited +IPD data
+        response = b""
+        while self.sim.uart.any():
+            chunk = self.sim.uart.read(200)
+            if chunk:
+                response += chunk
+            time.sleep(0.01)
+
+        if response and b"+IPD" in response:
+            self._extract_incoming(response)
+
+        # Method 2: Explicitly request incoming data with CIPRXGET
+        try:
+            rx_resp = self._send_at("AT+CIPRXGET=2,0,512", timeout=500)
+            if "+CIPRXGET:" in rx_resp and len(rx_resp) > 20:
+                # Parse the response to extract MQTT data
+                # Format: +CIPRXGET: 2,0,<len>\r\n<data>\r\nOK
+                lines = rx_resp.split("\n")
+                for i, line in enumerate(lines):
+                    if "+CIPRXGET:" in line:
+                        # Data is on the next line(s)
+                        data_lines = []
+                        for j in range(i + 1, len(lines)):
+                            if "OK" in lines[j]:
+                                break
+                            data_lines.append(lines[j])
+                        if data_lines:
+                            data = "\n".join(data_lines).strip()
+                            if data:
+                                data_bytes = data.encode("utf-8")
+                                if len(data_bytes) >= 2:
+                                    self._pending_messages.append(data_bytes)
+                        break
+        except Exception:
+            pass
+
+        # Process all pending messages
+        while self._pending_messages:
+            mqtt_data = self._pending_messages.pop(0)
+            self._parse_and_callback(mqtt_data)
+
+    def _parse_and_callback(self, data: bytes) -> None:
+        """Parse MQTT PUBLISH packet and call callback."""
+        if len(data) < 2:
+            return
+
+        # Log packet type
+        packet_type = data[0] >> 4
+        packet_names = {
+            3: "PUBLISH",
+            9: "SUBACK",
+            13: "PINGRESP",
+        }
+        name = packet_names.get(packet_type, f"UNKNOWN({packet_type})")
+        self._log(f"Packet: {name} ({len(data)} bytes)")
+
+        # Look for PUBLISH packet
+        for i in range(len(data)):
+            if (data[i] >> 4) == MQTT_PUBLISH:
                 try:
-                    # Parse topic length (skip remaining length byte)
-                    topic_len = struct.unpack("!H", data[2:4])[0]
-                    topic = data[4 : 4 + topic_len].decode("utf-8")
-                    # Parse payload
-                    payload_start = 4 + topic_len
-                    payload = data[payload_start:].decode("utf-8")
-                    if self.callback:
-                        self.callback(topic, payload.encode())
+                    # Parse remaining length
+                    remaining_length = 0
+                    multiplier = 1
+                    pos = i + 1
+                    while pos < len(data):
+                        byte = data[pos]
+                        remaining_length += (byte & 0x7F) * multiplier
+                        multiplier *= 128
+                        pos += 1
+                        if (byte & 0x80) == 0:
+                            break
+
+                    # Parse topic length
+                    if pos + 2 <= len(data):
+                        topic_len = struct.unpack("!H", data[pos : pos + 2])[0]
+                        pos += 2
+
+                        # Parse topic
+                        if pos + topic_len <= len(data):
+                            topic_bytes = data[pos : pos + topic_len]
+                            topic = topic_bytes.decode("utf-8")
+                            pos += topic_len
+
+                            # Parse payload
+                            if pos < len(data):
+                                payload_bytes = data[pos:]
+                                payload = payload_bytes.decode("utf-8")
+                                self._log(f"Received: {topic} = {payload}")
+                                if self.callback:
+                                    self.callback(topic_bytes, payload_bytes)
+                                return
                 except Exception as e:
                     self._log(f"Parse error: {e}")
 

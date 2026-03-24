@@ -33,7 +33,7 @@ Secrets:
 """
 
 # MQTT Configuration
-MQTT_SSL = True
+MQTT_SSL = False
 
 # MQTT Topics
 TOPIC_LED_COMMAND = "homeassistant/pico/switch/led/set"
@@ -85,7 +85,7 @@ ACS37030_BUFFER_SIZE = (
 )
 
 # Timing
-SENSOR_UPDATE_INTERVAL_MS = 1000
+SENSOR_UPDATE_INTERVAL_MS = 2000  # Reduced frequency for LTE (was 1000)
 RECONNECT_DELAY_S = 5
 TEMP_CONVERSION_TIME_MS = 750  # DS18B20 conversion time
 SENSOR_RETRY_INTERVAL_MS = 60000  # Retry failed sensor init every 60s
@@ -120,7 +120,7 @@ LTE_CONNECT_TIMEOUT_MS = 90000
 
 # GPS Configuration
 ENABLE_GPS = True
-GPS_UPDATE_INTERVAL_MS = 5000  # 5 seconds (direct polling, no background thread)
+GPS_UPDATE_INTERVAL_MS = 1000  # 10 seconds (was 5, GPS sends 9 messages!)
 
 # Signal & Network Update Intervals
 SIGNAL_UPDATE_INTERVAL_MS = 10000  # 10 seconds
@@ -145,11 +145,6 @@ TOPIC_GPS_LATITUDE = "homeassistant/pico/sensor/gps_latitude"
 TOPIC_GPS_LONGITUDE = "homeassistant/pico/sensor/gps_longitude"
 TOPIC_GPS_ALTITUDE = "homeassistant/pico/sensor/gps_altitude"
 TOPIC_GPS_SPEED = "homeassistant/pico/sensor/gps_speed"
-TOPIC_GPS_SATELLITES = "homeassistant/pico/sensor/gps_satellites"
-TOPIC_GPS_PDOP = "homeassistant/pico/sensor/gps_pdop_accuracy"
-TOPIC_GPS_COURSE = "homeassistant/pico/sensor/gps_course"
-
-TOPIC_GPS_FIX_STATUS = "homeassistant/pico/sensor/gps_fix_status"
 
 TOPIC_GPS_INTERVAL_SET = "homeassistant/pico/gps/set_interval"
 
