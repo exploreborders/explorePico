@@ -6,10 +6,7 @@
 #   - Signal Quality (text)
 #   - Network Operator
 #   - Network Type
-#   - GPS Latitude
-#   - GPS Longitude
-#   - GPS Altitude
-#   - GPS Speed
+#   - GPS (via device_tracker with JSON)
 #   - CPU Temperature
 #   - Room Temperature
 #   - Water Temperature
@@ -203,63 +200,6 @@ mqtt:
       state_topic: "homeassistant/pico/sensor/current_5"
       unit_of_measurement: "A"
       device_class: "current"
-      availability:
-        topic: "homeassistant/pico/availability"
-        payload_available: "online"
-        payload_not_available: "offline"
-      device:
-        identifiers:
-          - pico2w
-        name: "Raspberry Pi Pico 2W"
-
-    # GPS Latitude
-    - name: "Pico GPS Latitude"
-      unique_id: "pico_gps_latitude"
-      state_topic: "homeassistant/pico/sensor/gps_latitude"
-      unit_of_measurement: "°"
-      availability:
-        topic: "homeassistant/pico/availability"
-        payload_available: "online"
-        payload_not_available: "offline"
-      device:
-        identifiers:
-          - pico2w
-        name: "Raspberry Pi Pico 2W"
-
-    # GPS Longitude
-    - name: "Pico GPS Longitude"
-      unique_id: "pico_gps_longitude"
-      state_topic: "homeassistant/pico/sensor/gps_longitude"
-      unit_of_measurement: "°"
-      availability:
-        topic: "homeassistant/pico/availability"
-        payload_available: "online"
-        payload_not_available: "offline"
-      device:
-        identifiers:
-          - pico2w
-        name: "Raspberry Pi Pico 2W"
-
-    # GPS Altitude
-    - name: "Pico GPS Altitude"
-      unique_id: "pico_gps_altitude"
-      state_topic: "homeassistant/pico/sensor/gps_altitude"
-      unit_of_measurement: "m"
-      availability:
-        topic: "homeassistant/pico/availability"
-        payload_available: "online"
-        payload_not_available: "offline"
-      device:
-        identifiers:
-          - pico2w
-        name: "Raspberry Pi Pico 2W"
-
-    # GPS Speed
-    - name: "Pico GPS Speed"
-      unique_id: "pico_gps_speed"
-      state_topic: "homeassistant/pico/sensor/gps_speed"
-      unit_of_measurement: "km/h"
-      device_class: "speed"
       availability:
         topic: "homeassistant/pico/availability"
         payload_available: "online"

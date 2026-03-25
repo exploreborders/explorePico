@@ -141,11 +141,6 @@ TOPIC_SIGNAL_QUALITY = "homeassistant/pico/sensor/signal_quality"
 TOPIC_NETWORK_OPERATOR = "homeassistant/pico/sensor/network_operator"
 TOPIC_NETWORK_TYPE = "homeassistant/pico/sensor/network_type"
 
-TOPIC_GPS_LATITUDE = "homeassistant/pico/sensor/gps_latitude"
-TOPIC_GPS_LONGITUDE = "homeassistant/pico/sensor/gps_longitude"
-TOPIC_GPS_ALTITUDE = "homeassistant/pico/sensor/gps_altitude"
-TOPIC_GPS_SPEED = "homeassistant/pico/sensor/gps_speed"
-
 TOPIC_DEVICE_TRACKER = "homeassistant/device_tracker/pico2w/location"
 
 # Try to import from secrets.py, fallback to this file for development

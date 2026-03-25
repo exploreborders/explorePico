@@ -140,10 +140,6 @@ from config import (
     TOPIC_SIGNAL_QUALITY,
     TOPIC_NETWORK_OPERATOR,
     TOPIC_NETWORK_TYPE,
-    TOPIC_GPS_LATITUDE,
-    TOPIC_GPS_LONGITUDE,
-    TOPIC_GPS_ALTITUDE,
-    TOPIC_GPS_SPEED,
     TOPIC_DEVICE_TRACKER,
     LTE_UART_ID,
     LTE_TX_PIN,
@@ -756,17 +752,8 @@ def handle_gps_publish() -> None:
         # Publish from latest known fix
         data = _last_gps_fix
         if data:
-            lat = data.get("latitude", 0)
-            mqtt_publish(TOPIC_GPS_LATITUDE, f"{lat}")
-
-            lon = data.get("longitude", 0)
-            mqtt_publish(TOPIC_GPS_LONGITUDE, f"{lon}")
-
-            mqtt_publish(TOPIC_GPS_ALTITUDE, str(data.get("altitude", 0)))
-            mqtt_publish(TOPIC_GPS_SPEED, str(data.get("speed", 0)))
-
-            # Device tracker (raw numeric values for HA)
-            tracker_payload = ujson.dumps(
+            # Bundle all GPS data into one JSON message
+            gps_payload = ujson.dumps(
                 {
                     "latitude": data.get("latitude", 0),
                     "longitude": data.get("longitude", 0),
@@ -774,7 +761,7 @@ def handle_gps_publish() -> None:
                     "speed": data.get("speed", 0),
                 }
             )
-            mqtt_publish(TOPIC_DEVICE_TRACKER, tracker_payload, retain=True)
+            mqtt_publish(TOPIC_DEVICE_TRACKER, gps_payload, retain=True)
         last_gps_publish = now
 
 
