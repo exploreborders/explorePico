@@ -85,7 +85,7 @@ ACS37030_BUFFER_SIZE = (
 )
 
 # Timing
-SENSOR_UPDATE_INTERVAL_MS = 2000  # Reduced frequency for LTE (was 1000)
+SENSOR_UPDATE_INTERVAL_MS = 1000  # Reduced frequency for LTE (was 1000)
 RECONNECT_DELAY_S = 5
 TEMP_CONVERSION_TIME_MS = 750  # DS18B20 conversion time
 SENSOR_RETRY_INTERVAL_MS = 60000  # Retry failed sensor init every 60s
@@ -95,7 +95,7 @@ MQTT_DELAY_DISCOVERY = 0.8  # Between discovery publishes
 MQTT_DELAY_CONNECT = 2.0  # After connect, before subscribe
 MQTT_DELAY_SUBSCRIBE = 1.0  # After subscribe, before discovery
 MQTT_DELAY_INITIAL_STATE = 1.0  # After discovery, before initial state
-MQTT_LOOP_DELAY = 0.1  # Main loop iteration delay
+MQTT_LOOP_DELAY = 0.05  # Main loop iteration delay (fast for LTE)
 ERROR_DELAY_SHORT = 1.0  # After minor error
 ERROR_DELAY_LONG = 3.0  # After serious error/connection lost
 
@@ -145,8 +145,6 @@ TOPIC_GPS_LATITUDE = "homeassistant/pico/sensor/gps_latitude"
 TOPIC_GPS_LONGITUDE = "homeassistant/pico/sensor/gps_longitude"
 TOPIC_GPS_ALTITUDE = "homeassistant/pico/sensor/gps_altitude"
 TOPIC_GPS_SPEED = "homeassistant/pico/sensor/gps_speed"
-
-TOPIC_GPS_INTERVAL_SET = "homeassistant/pico/gps/set_interval"
 
 TOPIC_DEVICE_TRACKER = "homeassistant/device_tracker/pico2w/location"
 

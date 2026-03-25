@@ -144,7 +144,6 @@ from config import (
     TOPIC_GPS_LONGITUDE,
     TOPIC_GPS_ALTITUDE,
     TOPIC_GPS_SPEED,
-    TOPIC_GPS_INTERVAL_SET,
     TOPIC_DEVICE_TRACKER,
     LTE_UART_ID,
     LTE_TX_PIN,
@@ -235,7 +234,6 @@ _last_mqtt_values = {}
 reconnect_count = 0
 
 # LTE/GPS state
-gps_update_interval_ms = GPS_UPDATE_INTERVAL_MS
 last_gps_publish = 0
 _last_gps_fix: dict | None = None
 last_signal_publish = 0
@@ -281,6 +279,9 @@ def _publish_sensor_value(
             value = None
 
     if value is not None:
+        # Round current sensors to reduce publishes
+        if "current_" in state_topic:
+            value = round(float(value), 1)  # 1 decimal place
         mqtt_publish(state_topic, str(value))
     elif needs_unavailable and sensor_manager and sensor_manager.ever_connected:
         mqtt_publish(state_topic, "unavailable")
@@ -401,6 +402,9 @@ def publish_all_sensors() -> None:
             needs_unavailable=sensor.get("needs_unavailable", False),
             apply_offset=sensor.get("apply_offset", False),
         )
+        # Check for incoming messages after each sensor publish
+        if mqtt_client:
+            mqtt_client.check_msg()
 
 
 def publish_led_state() -> None:
@@ -457,7 +461,7 @@ def update_version_received(latest: str) -> None:
 # -----------------------------------------------------------------------------
 def on_message(topic: bytes, msg: bytes) -> None:
     """Handle incoming MQTT messages."""
-    global led_state, update_state, gps_update_interval_ms
+    global led_state, update_state
 
     try:
         topic_str = topic.decode()
@@ -517,19 +521,6 @@ def on_message(topic: bytes, msg: bytes) -> None:
                     update_version_received(latest)
             except Exception as e:
                 log("ERROR", f"Failed to parse latest version: {e}")
-
-        elif topic_str == TOPIC_GPS_INTERVAL_SET:
-            # Set GPS update interval from Home Assistant
-            global gps_update_interval_ms
-            try:
-                interval_seconds = int(msg.decode().strip())
-                if 10 <= interval_seconds <= 3600:
-                    gps_update_interval_ms = interval_seconds * 1000
-                    log("GPS", f"Interval set to {interval_seconds}s")
-                else:
-                    log("GPS", "Interval must be 10-3600 seconds")
-            except Exception as e:
-                log("ERROR", f"Failed to parse GPS interval: {e}")
 
     except Exception as e:
         log("ERROR", f"Message handling failed: {e}")
@@ -593,92 +584,6 @@ def create_mqtt_client():
     return client
 
 
-def diagnose_mqtt_connection() -> None:
-    """Test MQTT connectivity using SIM7600 AT commands.
-
-    Tests basic TCP connection via AT+CIPOPEN to verify network works.
-    """
-    global _cached_broker_ip
-
-    log("DIAG", "Testing network connectivity via AT commands...")
-
-    # Get LTE manager
-    if not LTE_AVAILABLE or not get_lte_manager:
-        log("DIAG", "LTE not available")
-        return
-
-    lte_mgr = get_lte_manager()
-    if not lte_mgr:
-        log("DIAG", "No LTE manager")
-        return
-
-    sim = lte_mgr.sim
-    if not sim:
-        log("DIAG", "No SIM7600 instance")
-        return
-
-    # Resolve hostname
-    ip = _cached_broker_ip
-    if not ip:
-        log("DIAG", "Resolving hostname via AT+CDNSGIP...")
-        try:
-            dns_resp = sim.send_at(f'AT+CDNSGIP="{MQTT_BROKER}"', timeout=15000)
-            if "+CDNSGIP:" in dns_resp:
-                for line in dns_resp.split("\n"):
-                    if "+CDNSGIP:" in line:
-                        parts = line.split(",")
-                        if len(parts) >= 3:
-                            ip_str = parts[-1].strip()
-                            ip_str = ip_str.split('"')[1] if '"' in ip_str else ip_str
-                            ip_str = "".join(
-                                c for c in ip_str if c.isdigit() or c == "."
-                            )
-                            if ip_str and "." in ip_str:
-                                ip = ip_str
-                                _cached_broker_ip = ip
-        except Exception as e:
-            log("DIAG", f"DNS failed: {e}")
-
-    if not ip:
-        log("DIAG", "Cannot resolve hostname")
-        return
-
-    log("DIAG", f"Resolved to: {ip}")
-
-    # Test TCP connection via AT+CIPOPEN (use port 1883 for plain MQTT)
-    mqtt_port = 1883  # Plain MQTT port for LTE
-    log("DIAG", f"Testing TCP to {ip}:{mqtt_port} via AT+CIPOPEN...")
-    try:
-        # Close any existing connection first
-        sim.send_at("AT+CIPCLOSE=0", timeout=3000)
-        time.sleep(0.5)
-
-        # Open TCP connection
-        cmd = f'AT+CIPOPEN=0,"TCP","{ip}",{mqtt_port}'
-        resp = sim.send_at(cmd, timeout=15000)
-        log("DIAG", f"CIPOPEN resp: {resp[:60]}")
-
-        if "OK" in resp:
-            # Wait for connection to establish
-            time.sleep(2)
-            log("DIAG", "TCP connection OK!")
-        elif "ERROR" in resp:
-            log("DIAG", "TCP connection failed (ERROR)")
-        else:
-            # Check for error code
-            if "+CIPOPEN:" in resp:
-                parts = resp.split(",")
-                if len(parts) >= 2:
-                    err = parts[1].strip().split()[0]
-                    log("DIAG", f"TCP connection error: {err}")
-
-        # Close connection
-        sim.send_at("AT+CIPCLOSE=0", timeout=5000)
-        time.sleep(0.5)
-    except Exception as e:
-        log("DIAG", f"TCP test failed: {e}")
-
-
 def connect_mqtt() -> bool:
     """Connect to MQTT broker and set up subscriptions."""
     global mqtt_client
@@ -687,10 +592,6 @@ def connect_mqtt() -> bool:
     blink_pattern("10")
 
     try:
-        # Run diagnostics for LTE connections only
-        if connection_type == "LTE":
-            diagnose_mqtt_connection()
-
         # Small delay to ensure network is fully established
         time.sleep(2)
 
@@ -720,7 +621,6 @@ def connect_mqtt() -> bool:
         mqtt_client.subscribe(TOPIC_LED_COMMAND)
         mqtt_client.subscribe(TOPIC_UPDATE_CMD)
         mqtt_client.subscribe(TOPIC_UPDATE_LATEST)
-        mqtt_client.subscribe(TOPIC_GPS_INTERVAL_SET)
         log("MQTT", "Subscribed!")
 
         time.sleep(MQTT_DELAY_INITIAL_STATE)
@@ -771,7 +671,14 @@ def handle_sensor_publish() -> None:
     global last_sensor_publish
 
     now = time.ticks_ms()
-    if time.ticks_diff(now, last_sensor_publish) >= SENSOR_UPDATE_INTERVAL_MS:
+    # Use different intervals based on connection type
+    interval = SENSOR_UPDATE_INTERVAL_MS
+    if connection_type == "LTE":
+        interval = 10000  # 10 seconds for LTE (slow AT commands)
+    elif connection_type == "WiFi":
+        interval = SENSOR_UPDATE_INTERVAL_MS  # 1 second for WiFi (fast sockets)
+
+    if time.ticks_diff(now, last_sensor_publish) >= interval:
         publish_all_sensors()
         last_sensor_publish = now
 
@@ -832,9 +739,15 @@ def handle_gps_publish() -> None:
         return
 
     now = time.ticks_ms()
-    if time.ticks_diff(now, last_gps_publish) >= gps_update_interval_ms:
+    # Use different intervals based on connection type
+    if connection_type == "LTE":
+        interval = 10000  # 10 seconds for LTE (slow AT commands)
+    elif connection_type == "WiFi":
+        interval = GPS_UPDATE_INTERVAL_MS  # 1 second for WiFi (fast sockets)
+
+    if time.ticks_diff(now, last_gps_publish) >= interval:
         # Poll GPS with timeout
-        gps = get_gps_location(timeout_ms=5000)
+        gps = get_gps_location()
 
         # Cache last valid fix so we can republish even if GPS temporarily loses signal
         if gps and gps.get("latitude", 0) != 0 and gps.get("longitude", 0) != 0:
@@ -882,12 +795,17 @@ def run_main_loop() -> None:
         )
         if not has_pending:
             handle_sensor_publish()
+            handle_mqtt_message()  # Check after each publish
             handle_connection_type_publish()
+            handle_mqtt_message()
             handle_lte_signal_publish()
+            handle_mqtt_message()
             handle_lte_network_publish()
+            handle_mqtt_message()
             handle_gps_publish()
+            handle_mqtt_message()
 
-        # Check again after sending
+        # Final check
         handle_mqtt_message()
 
         time.sleep(MQTT_LOOP_DELAY)
