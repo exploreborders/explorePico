@@ -33,7 +33,7 @@ Secrets:
 """
 
 # MQTT Configuration
-MQTT_SSL = False
+MQTT_SSL = True
 
 # MQTT Topics
 TOPIC_LED_COMMAND = "homeassistant/pico/switch/led/set"
@@ -120,15 +120,15 @@ LTE_CONNECT_TIMEOUT_MS = 90000
 
 # GPS Configuration
 ENABLE_GPS = True
-GPS_UPDATE_INTERVAL_MS = 1000  # 10 seconds (was 5, GPS sends 9 messages!)
+GPS_UPDATE_INTERVAL_MS = 1000  # 1 second (was 5, GPS sends 4 messages!)
 
 # Signal & Network Update Intervals
 SIGNAL_UPDATE_INTERVAL_MS = 10000  # 10 seconds
 NETWORK_INFO_UPDATE_INTERVAL_MS = 300000
 
 # Connection Priority (try first, fallback second)
-PRIMARY_CONNECTION = "LTE"
-FALLBACK_CONNECTION = "WIFI"
+PRIMARY_CONNECTION = "WIFI"
+FALLBACK_CONNECTION = "LTE"
 
 # -----------------------------------------------------------------------------
 # LTE/GPS/Network MQTT Topics

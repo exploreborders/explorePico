@@ -697,8 +697,13 @@ def connect_mqtt() -> bool:
         mqtt_client = create_mqtt_client()
 
         # Check if connect() succeeds
+        # umqtt.simple returns 0 for success, not True!
         try:
-            if not mqtt_client.connect():
+            log("MQTT", f"Attempting connection to {MQTT_BROKER}:{MQTT_PORT}...")
+            result = mqtt_client.connect()
+            log("MQTT", f"Connect result: {result}")
+            # 0 = success (CONNACK return code), None or exception = failure
+            if result is None:
                 log("MQTT", "Connection failed!")
                 mqtt_client = None
                 return False
@@ -872,7 +877,10 @@ def run_main_loop() -> None:
         handle_mqtt_message()
 
         # Only send data if no incoming messages are pending
-        if not mqtt_client._pending_messages:
+        has_pending = (
+            hasattr(mqtt_client, "_pending_messages") and mqtt_client._pending_messages
+        )
+        if not has_pending:
             handle_sensor_publish()
             handle_connection_type_publish()
             handle_lte_signal_publish()
