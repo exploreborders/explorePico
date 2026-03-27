@@ -195,7 +195,8 @@ class SIM7600MQTT:
             time.sleep(0.1)
 
         if not got_prompt:
-            self._log("No > prompt received")
+            self._log("Connection lost - no > prompt")
+            self.connected = False
             return "ERROR: no prompt"
 
         # Send binary data immediately after prompt
