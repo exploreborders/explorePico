@@ -91,11 +91,11 @@ TEMP_CONVERSION_TIME_MS = 750  # DS18B20 conversion time
 SENSOR_RETRY_INTERVAL_MS = 60000  # Retry failed sensor init every 60s
 
 # MQTT Timing Delays (reduced with faster UART)
-MQTT_DELAY_DISCOVERY = 0.5  # Between discovery publishes
+MQTT_DELAY_DISCOVERY = 1.0  # Between discovery publishes (increased for HA)
 MQTT_DELAY_CONNECT = 0.5  # After connect, before subscribe
-MQTT_DELAY_SUBSCRIBE = 0.3  # After subscribe, before discovery
-MQTT_DELAY_INITIAL_STATE = 0.5  # After discovery, before initial state
-MQTT_LOOP_DELAY = 0.05  # Main loop iteration delay (fast for LTE)
+MQTT_DELAY_SUBSCRIBE = 0.5  # After subscribe, before discovery
+MQTT_DELAY_INITIAL_STATE = 1.0  # After discovery, before initial state
+MQTT_LOOP_DELAY = 0.05  # Main loop iteration delay (prevent UART flooding)
 ERROR_DELAY_SHORT = 1.0  # After minor error
 ERROR_DELAY_LONG = 3.0  # After serious error/connection lost
 
@@ -114,7 +114,7 @@ LTE_UART_ID = 0
 LTE_TX_PIN = 0  # GP0 → SIM7600 RXD (NOTE: TX/RX crossed!)
 LTE_RX_PIN = 1  # GP1 → SIM7600 TXD
 LTE_RTS_PIN = 3  # GP3 → SIM7600 CTS (hardware flow control)
-LTE_CTS_PIN = 2 # GP2 → SIM7600 RTS (hardware flow control)
+LTE_CTS_PIN = 2  # GP2 → SIM7600 RTS (hardware flow control)
 LTE_BAUD = 230400  # Balanced speed/reliability (460800 may have signal issues)
 LTE_APN = "internet"  # O2 APN
 

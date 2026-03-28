@@ -174,16 +174,16 @@ class SIM7600MQTT:
     def _send_data(self, data: bytes, timeout: int = 10000) -> str:
         """Send raw bytes via AT+CIPSEND.
 
-        Optimized for 460800+ baud: reduced sleeps and faster polling.
+        Optimized for 230400 baud with hardware flow control.
         """
         # Drain UART — incoming +IPD is auto-captured by _incoming_handler
         self.sim._drain_uart()
-        time.sleep(0.02)
+        time.sleep(0.03)
 
         # Send CIPSEND command
         cmd = f"AT+CIPSEND=0,{len(data)}"
         self.sim.uart.write(cmd.encode() + b"\r\n")
-        time.sleep(0.03)
+        time.sleep(0.05)
 
         # Wait for '>' prompt (max 2s — at 460800 baud this comes within ~100ms)
         start = time.ticks_ms()
@@ -203,7 +203,7 @@ class SIM7600MQTT:
 
         # Send binary data immediately after prompt
         self.sim.uart.write(data)
-        time.sleep(0.02)
+        time.sleep(0.03)
 
         # Wait for SEND OK or +CIPSEND confirmation
         start = time.ticks_ms()

@@ -631,6 +631,9 @@ def connect_mqtt() -> bool:
         publish_version(current_version, current_version, False)
         publish_all_sensors()
 
+        # Small delay to ensure all initial states are sent before main loop
+        time.sleep(0.2)
+
         log("MQTT", "Ready!")
         blink_pattern("1010")
         return True
