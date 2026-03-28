@@ -43,6 +43,8 @@ class SIM7600:
         tx_pin: int = 1,
         rx_pin: int = 0,
         baudrate: int = 115200,
+        rts_pin: int = 2,
+        cts_pin: int = 3,
     ) -> None:
         """Initialize SIM7600 driver.
 
@@ -51,11 +53,15 @@ class SIM7600:
             tx_pin: GPIO pin for UART TX
             rx_pin: GPIO pin for UART RX
             baudrate: UART baudrate (default 115200)
+            rts_pin: GPIO pin for RTS (hardware flow control)
+            cts_pin: GPIO pin for CTS (hardware flow control)
         """
         self.uart_id = uart_id
         self.tx_pin = tx_pin
         self.rx_pin = rx_pin
         self.baudrate = baudrate
+        self.rts_pin = rts_pin
+        self.cts_pin = cts_pin
         self._target_baud = baudrate  # Remember desired baud for fallback logic
 
         self.uart: UART | None = None
@@ -150,6 +156,8 @@ class SIM7600:
                         baud,
                         tx=Pin(self.tx_pin),
                         rx=Pin(self.rx_pin),
+                        rts=Pin(self.rts_pin),
+                        cts=Pin(self.cts_pin),
                         rxbuf=4096,
                     )
                 self.uart.init(baud, bits=8, parity=None, stop=1)
@@ -181,7 +189,7 @@ class SIM7600:
 
         # Try common baud rates: target first, then fallbacks
         baud_rates = list(
-            dict.fromkeys([self._target_baud, 460800, 230400, 115200])
+            dict.fromkeys([self._target_baud, 230400, 115200])
         )  # Deduplicated, preserves order
 
         connected = False
@@ -218,6 +226,14 @@ class SIM7600:
             resp = self._send_at_simple("ATE0", timeout=2000)
             if resp and "OK" in resp:
                 self._log("Echo disabled!")
+                break
+            time.sleep(0.2)
+
+        self._log("Enabling hardware flow control (RTS/CTS)...")
+        for _ in range(3):
+            resp = self._send_at_simple("AT+IFC=2,2", timeout=2000)
+            if resp and "OK" in resp:
+                self._log("Hardware flow control enabled!")
                 break
             time.sleep(0.2)
 
@@ -637,7 +653,7 @@ class SIM7600:
 
             # Re-enter PIN (may be needed after restart)
             if pin:
-                self._log(f"Re-entering PIN after restart...")
+                self._log("Re-entering PIN after restart...")
                 self.set_pin(pin)
             time.sleep(1)
 

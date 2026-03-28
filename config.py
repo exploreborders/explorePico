@@ -113,7 +113,9 @@ LTE_ENABLED = True
 LTE_UART_ID = 0
 LTE_TX_PIN = 0  # GP0 → SIM7600 RXD (NOTE: TX/RX crossed!)
 LTE_RX_PIN = 1  # GP1 → SIM7600 TXD
-LTE_BAUD = 460800  # Balanced speed/reliability (460800 may have signal issues)
+LTE_RTS_PIN = 3  # GP3 → SIM7600 CTS (hardware flow control)
+LTE_CTS_PIN = 2 # GP2 → SIM7600 RTS (hardware flow control)
+LTE_BAUD = 230400  # Balanced speed/reliability (460800 may have signal issues)
 LTE_APN = "internet"  # O2 APN
 
 LTE_CONNECT_TIMEOUT_MS = 90000
@@ -255,6 +257,22 @@ def validate_config() -> bool:
         or LTE_RX_PIN in (23, 24, 25, 29)
     ):
         errors.append("LTE_RX_PIN must be 0-22 or 26-28 (23-25, 29 reserved)")
+
+    if (
+        not isinstance(LTE_RTS_PIN, int)
+        or LTE_RTS_PIN < 0
+        or LTE_RTS_PIN > 28
+        or LTE_RTS_PIN in (23, 24, 25, 29)
+    ):
+        errors.append("LTE_RTS_PIN must be 0-22 or 26-28 (23-25, 29 reserved)")
+
+    if (
+        not isinstance(LTE_CTS_PIN, int)
+        or LTE_CTS_PIN < 0
+        or LTE_CTS_PIN > 28
+        or LTE_CTS_PIN in (23, 24, 25, 29)
+    ):
+        errors.append("LTE_CTS_PIN must be 0-22 or 26-28 (23-25, 29 reserved)")
 
     if errors:
         raise ValueError(

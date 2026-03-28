@@ -57,6 +57,8 @@ def init_gps(
     tx_pin: int = 0,
     rx_pin: int = 1,
     baudrate: int = 115200,
+    rts_pin: int = 2,
+    cts_pin: int = 3,
 ) -> bool:
     """Initialize SIM7600 for GPS only (no LTE connection).
 
@@ -69,6 +71,8 @@ def init_gps(
         tx_pin: GPIO pin for TX (GP0)
         rx_pin: GPIO pin for RX (GP1)
         baudrate: UART baudrate
+        rts_pin: GPIO pin for RTS (hardware flow control)
+        cts_pin: GPIO pin for CTS (hardware flow control)
 
     Returns:
         True if initialized successfully
@@ -77,7 +81,7 @@ def init_gps(
 
     _log("GPS", "Initializing SIM7600 for GPS...")
 
-    sim = SIM7600(uart_id, tx_pin, rx_pin, baudrate)
+    sim = SIM7600(uart_id, tx_pin, rx_pin, baudrate, rts_pin, cts_pin)
     sim.set_logger(_log)
 
     if not sim.init():
@@ -101,6 +105,8 @@ def connect_lte(
     tx_pin: int = 0,
     rx_pin: int = 1,
     baudrate: int = 115200,
+    rts_pin: int = 2,
+    cts_pin: int = 3,
 ) -> bool:
     """Connect to LTE network.
 
@@ -115,6 +121,8 @@ def connect_lte(
         tx_pin: TX GPIO pin
         rx_pin: RX GPIO pin
         baudrate: UART baudrate
+        rts_pin: GPIO pin for RTS (hardware flow control)
+        cts_pin: GPIO pin for CTS (hardware flow control)
 
     Returns:
         True if connected successfully
@@ -135,7 +143,7 @@ def connect_lte(
     # Fresh init
     _log("LTE", "Initializing SIM7600...")
 
-    sim = SIM7600(uart_id, tx_pin, rx_pin, baudrate)
+    sim = SIM7600(uart_id, tx_pin, rx_pin, baudrate, rts_pin, cts_pin)
     sim.set_logger(_log)
 
     if not sim.init():

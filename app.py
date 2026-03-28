@@ -144,6 +144,8 @@ from config import (
     LTE_UART_ID,
     LTE_TX_PIN,
     LTE_RX_PIN,
+    LTE_RTS_PIN,
+    LTE_CTS_PIN,
     LTE_BAUD,
 )
 
@@ -929,6 +931,8 @@ def main() -> None:
                         tx_pin=LTE_TX_PIN,
                         rx_pin=LTE_RX_PIN,
                         baudrate=LTE_BAUD,
+                        rts_pin=LTE_RTS_PIN,
+                        cts_pin=LTE_CTS_PIN,
                     )
                     _gps_available = True
             except Exception as e:

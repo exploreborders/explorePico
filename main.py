@@ -50,6 +50,8 @@ try:
         LTE_UART_ID,
         LTE_TX_PIN,
         LTE_RX_PIN,
+        LTE_RTS_PIN,
+        LTE_CTS_PIN,
         LTE_BAUD,
         LTE_CONNECT_TIMEOUT_MS,
         PRIMARY_CONNECTION,
@@ -88,6 +90,8 @@ def connect_lte() -> bool:
             tx_pin=LTE_TX_PIN,
             rx_pin=LTE_RX_PIN,
             baudrate=LTE_BAUD,
+            rts_pin=LTE_RTS_PIN,
+            cts_pin=LTE_CTS_PIN,
         ):
             lte_connected = True
             return True

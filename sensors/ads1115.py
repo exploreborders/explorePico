@@ -193,12 +193,12 @@ class ADS1115:
                 ][channel]
 
                 config = (
-                    self.OS_SINGLE | mux | self.gain | self.MODE_SINGLE | self.DR_128SPS
+                    self.OS_SINGLE | mux | self.gain | self.MODE_SINGLE | self.DR_920SPS
                 )
 
                 self._write_config(config)
 
-                time.sleep(0.15)
+                time.sleep(0.015)  # 920 SPS = ~1.1ms conversion, 15ms is safe margin
 
                 raw = self._read_conversion()
 
@@ -241,11 +241,11 @@ class ADS1115:
                 ][channel]
 
                 config = (
-                    self.OS_SINGLE | mux | self.gain | self.MODE_SINGLE | self.DR_128SPS
+                    self.OS_SINGLE | mux | self.gain | self.MODE_SINGLE | self.DR_920SPS
                 )
 
                 self._write_config(config)
-                time.sleep(0.15)
+                time.sleep(0.015)  # 920 SPS = ~1.1ms conversion
 
                 raw = self._read_conversion()
 
