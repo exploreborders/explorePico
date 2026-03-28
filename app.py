@@ -388,7 +388,11 @@ def _read_current_with_offset(index: int) -> float | None:
 
 
 def publish_all_sensors() -> None:
-    """Publish all sensor values from registry."""
+    """Publish all sensor values from registry.
+
+    Reads all sensors first, then publishes all values.
+    Checks for incoming messages once after the batch.
+    """
     for sensor in SENSOR_REGISTRY:
         _publish_sensor_value(
             read_func=sensor["read_func"],
@@ -398,9 +402,9 @@ def publish_all_sensors() -> None:
             needs_unavailable=sensor.get("needs_unavailable", False),
             apply_offset=sensor.get("apply_offset", False),
         )
-        # Check for incoming messages after each sensor publish
-        if mqtt_client:
-            mqtt_client.check_msg()
+    # Single message check after the entire batch (reduces UART overhead)
+    if mqtt_client:
+        mqtt_client.check_msg()
 
 
 def publish_led_state() -> None:
@@ -588,9 +592,6 @@ def connect_mqtt() -> bool:
     blink_pattern("10")
 
     try:
-        # Small delay to ensure network is fully established
-        time.sleep(2)
-
         mqtt_client = create_mqtt_client()
 
         # Check if connect() succeeds
@@ -609,7 +610,9 @@ def connect_mqtt() -> bool:
             mqtt_client = None
             return False
 
-        time.sleep(1)  # Wait for SSL handshake to complete
+        # Only wait for SSL handshake if using SSL (WiFi). LTE uses plain MQTT.
+        if MQTT_SSL:
+            time.sleep(1)
         mqtt_client.publish(TOPIC_AVAILABILITY, "online", retain=True)
         log("MQTT", "Connected!")
 
@@ -621,13 +624,10 @@ def connect_mqtt() -> bool:
 
         time.sleep(MQTT_DELAY_INITIAL_STATE)
         publish_led_state()
-        time.sleep(0.5)
         # Initial version publish: read from flash and send to HA
         current_version = read_version() or "0.0"
         publish_version(current_version, current_version, False)
-        time.sleep(0.5)
         publish_all_sensors()
-        time.sleep(0.5)  # Extra delay after sensor publish
 
         log("MQTT", "Ready!")
         blink_pattern("1010")
@@ -670,7 +670,7 @@ def handle_sensor_publish() -> None:
     # Use different intervals based on connection type
     interval = SENSOR_UPDATE_INTERVAL_MS
     if connection_type == "LTE":
-        interval = 10000  # 10 seconds for LTE (slow AT commands)
+        interval = 5000  # 5 seconds for LTE (4x baud = faster than before)
     elif connection_type == "WiFi":
         interval = SENSOR_UPDATE_INTERVAL_MS  # 1 second for WiFi (fast sockets)
 
@@ -737,9 +737,11 @@ def handle_gps_publish() -> None:
     now = time.ticks_ms()
     # Use different intervals based on connection type
     if connection_type == "LTE":
-        interval = 10000  # 10 seconds for LTE (slow AT commands)
+        interval = 5000  # 5 seconds for LTE (faster UART)
     elif connection_type == "WiFi":
         interval = GPS_UPDATE_INTERVAL_MS  # 1 second for WiFi (fast sockets)
+    else:
+        interval = GPS_UPDATE_INTERVAL_MS  # Default fallback
 
     if time.ticks_diff(now, last_gps_publish) >= interval:
         # Poll GPS with timeout
@@ -768,31 +770,25 @@ def handle_gps_publish() -> None:
 def run_main_loop() -> None:
     """Run the main MQTT loop.
 
-    Prioritizes incoming messages over outgoing data.
+    Optimized: calls check_msg() only twice per iteration (start + end)
+    instead of after every single operation. Incoming messages are buffered
+    by the SIM7600 and processed at the next check.
     """
     global mqtt_client
 
     try:
-        # ALWAYS check for incoming messages first (highest priority)
+        # Check for incoming messages first (highest priority)
         handle_mqtt_message()
 
-        # Only send data if no incoming messages are pending
-        has_pending = (
-            hasattr(mqtt_client, "_pending_messages") and mqtt_client._pending_messages
-        )
-        if not has_pending:
-            handle_sensor_publish()
-            handle_mqtt_message()  # Check after each publish
-            handle_connection_type_publish()
-            handle_mqtt_message()
-            handle_lte_signal_publish()
-            handle_mqtt_message()
-            handle_lte_network_publish()
-            handle_mqtt_message()
-            handle_gps_publish()
-            handle_mqtt_message()
+        # Send all outgoing data without intermediate message checks
+        # The SIM7600 buffers incoming data, nothing is lost
+        handle_sensor_publish()
+        handle_connection_type_publish()
+        handle_lte_signal_publish()
+        handle_lte_network_publish()
+        handle_gps_publish()
 
-        # Final check
+        # Final check for any messages that arrived during the publish batch
         handle_mqtt_message()
 
         time.sleep(MQTT_LOOP_DELAY)

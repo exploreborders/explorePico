@@ -56,9 +56,11 @@ class SIM7600:
         self.tx_pin = tx_pin
         self.rx_pin = rx_pin
         self.baudrate = baudrate
+        self._target_baud = baudrate  # Remember desired baud for fallback logic
 
         self.uart: UART | None = None
         self._logger = print
+        self._incoming_handler = None  # Callback for +IPD data (set by MQTT client)
 
         self.gps_enabled = False
         self.gps_configured = False
@@ -72,14 +74,37 @@ class SIM7600:
         """Log message using configured logger."""
         self._logger("SIM7600", message)
 
+    def _drain_uart(self) -> bytes:
+        """Read and return all pending UART data.
+
+        If _incoming_handler is set and +IPD data is found, passes it to the handler
+        so incoming MQTT messages are not lost.
+
+        Returns:
+            All bytes currently in the UART buffer.
+        """
+        data = b""
+        while self.uart.any():
+            chunk = self.uart.read(256)
+            if chunk:
+                data += chunk
+            else:
+                break
+        # Pass incoming data to handler (e.g., MQTT +IPD extraction)
+        if data and self._incoming_handler:
+            try:
+                self._incoming_handler(data)
+            except Exception:
+                pass
+        return data
+
     def _send_at_simple(self, command: str, timeout: int = 1000) -> str:
         """Simple AT command sender for initialization."""
         if not self.uart:
             return ""
 
         try:
-            while self.uart.any():
-                self.uart.read(50)
+            self._drain_uart()
             time.sleep(0.1)
             self.uart.write(command.encode() + b"\r\n")
             start = time.ticks_ms()
@@ -87,9 +112,12 @@ class SIM7600:
 
             while time.ticks_diff(time.ticks_ms(), start) < timeout:
                 if self.uart.any():
-                    data = self.uart.read(256)
-                    if data:
-                        response += data.decode("utf-8", "ignore")
+                    try:
+                        data = self.uart.read(256)
+                        if data:
+                            response += data.decode("utf-8", "ignore")
+                    except UnicodeError:
+                        return ""
 
                 if "OK" in response or "ERROR" in response:
                     break
@@ -102,57 +130,88 @@ class SIM7600:
     def init(self) -> bool:
         """Initialize UART communication with SIM7600.
 
+        Auto-detects baud rate (modem might be at 115200, 230400, or 460800
+        depending on previous AT+IPR settings). Never uses AT+IPR — baud
+        switching is done per-session only.
+
         Returns:
             True if SIM7600 responds to AT command
         """
         self._log("Waiting 15s for module to fully boot...")
         time.sleep(15)
 
-        # Initialize UART at fixed 115200
-        self.baudrate = 115200
-        self._log(f"Connecting at {self.baudrate} baud...")
+        def _try_connect(baud: int) -> bool:
+            """Try to connect at a given baud rate. Returns True if OK."""
+            self._log(f"Trying {baud} baud...")
+            try:
+                if self.uart is None:
+                    self.uart = UART(
+                        self.uart_id,
+                        baud,
+                        tx=Pin(self.tx_pin),
+                        rx=Pin(self.rx_pin),
+                        rxbuf=4096,
+                    )
+                self.uart.init(baud, bits=8, parity=None, stop=1)
+            except Exception:
+                return False
 
-        try:
-            self.uart = UART(
-                self.uart_id,
-                self.baudrate,
-                tx=Pin(self.tx_pin),
-                rx=Pin(self.rx_pin),
-            )
-            self.uart.init(self.baudrate, bits=8, parity=None, stop=1)
-        except Exception:
-            self._log("Failed to initialize UART")
+            time.sleep(0.5)
+            for _ in range(3):
+                self._drain_uart()
+                time.sleep(0.5)
+                self.uart.write(b"AT\r\n")
+
+                response = ""
+                for _ in range(20):
+                    if self.uart.any():
+                        try:
+                            data = self.uart.read(128)
+                            if data:
+                                response += data.decode("utf-8", "ignore")
+                        except UnicodeError:
+                            break  # Wrong baud rate
+                    if "OK" in response:
+                        self.baudrate = baud
+                        return True
+                    if "ERROR" in response:
+                        break
+                    time.sleep(0.2)
             return False
 
-        time.sleep(1)
+        # Try common baud rates: target first, then fallbacks
+        baud_rates = list(
+            dict.fromkeys([self._target_baud, 460800, 230400, 115200])
+        )  # Deduplicated, preserves order
 
-        # Test connection - verify SIM7600 responds
         connected = False
-        for attempt in range(5):
-            while self.uart.any():
-                self.uart.read(100)
-            time.sleep(0.5)
-            self.uart.write(b"AT\r\n")
-
-            response = ""
-            for _ in range(20):
-                if self.uart.any():
-                    data = self.uart.read(128)
-                    if data:
-                        response += data.decode("utf-8", "ignore")
-                if "OK" in response:
-                    connected = True
-                    break
-                if "ERROR" in response:
-                    break
-                time.sleep(0.5)
-
-            if connected:
+        for baud in baud_rates:
+            if _try_connect(baud):
+                connected = True
                 break
 
         if not connected:
-            self._log("Failed to connect at 115200 baud")
+            self._log("Failed to connect at any baud rate")
             return False
+
+        self._log(f"Connected at {self.baudrate} baud")
+
+        # Switch to target baud if we connected at a different rate
+        # Do NOT use AT+IPR — just reinitialize the UART directly
+        # (modem stays at whatever it was, we just match it)
+        if self.baudrate != self._target_baud:
+            self._log(f"Switching UART to {self._target_baud} to match modem...")
+            # Verify modem can talk at target baud
+            self.uart.init(self._target_baud, bits=8, parity=None, stop=1)
+            time.sleep(0.3)
+            test = self._send_at_simple("AT", timeout=2000)
+            if "OK" in test:
+                self.baudrate = self._target_baud
+                self._log(f"Switched to {self.baudrate} baud")
+            else:
+                # Revert to working baud
+                self.uart.init(self.baudrate, bits=8, parity=None, stop=1)
+                self._log(f"Modem not at target baud, staying at {self.baudrate}")
 
         self._log("Disabling echo...")
         for _ in range(3):
@@ -160,7 +219,7 @@ class SIM7600:
             if resp and "OK" in resp:
                 self._log("Echo disabled!")
                 break
-            time.sleep(0.5)
+            time.sleep(0.2)
 
         self._log("Setting full functionality...")
         for _ in range(3):
@@ -168,7 +227,7 @@ class SIM7600:
             if resp and "OK" in resp:
                 self._log("Full functionality set!")
                 break
-            time.sleep(1)
+            time.sleep(0.5)
 
         self._log("SIM7600 initialized successfully!")
         return True
@@ -193,8 +252,10 @@ class SIM7600:
             return "ERROR"
 
         try:
+            # Drain buffer — NOTE: any +IPD data here will be lost.
+            # Incoming messages should be checked via check_msg() before calling send_at.
             while self.uart.any():
-                self.uart.read(100)
+                self.uart.read(256)
             time.sleep(0.05)
             self.uart.write(command.encode() + b"\r\n")
             start = time.ticks_ms()
@@ -202,9 +263,14 @@ class SIM7600:
 
             while time.ticks_diff(time.ticks_ms(), start) < timeout:
                 if self.uart.any():
-                    char = self.uart.read(1)
-                    if char:
-                        response += char.decode("utf-8", "ignore")
+                    try:
+                        data = self.uart.read(256)
+                        if data:
+                            response += data.decode("utf-8", "ignore")
+                    except UnicodeError:
+                        # Corrupted data at wrong baud rate — drain and retry
+                        self._drain_uart()
+                        return "ERROR"
 
                 if expected in response:
                     return response.strip()
@@ -217,7 +283,7 @@ class SIM7600:
             return response.strip() if response else "ERROR"
 
         except Exception as e:
-            self._log(f"AT send error: {e}")
+            self._log(f"AT send error [{command[:30]}]: {type(e).__name__}: {e}")
             return "ERROR"
 
     def send_data(self, data: str, timeout: int = 5000) -> str:
@@ -245,9 +311,10 @@ class SIM7600:
 
             while time.ticks_diff(time.ticks_ms(), start) < timeout:
                 if self.uart.any():
-                    char = self.uart.read(1)
-                    if char:
-                        response += char.decode("utf-8", "ignore")
+                    # Read in chunks for better throughput
+                    chunk = self.uart.read(256)
+                    if chunk:
+                        response += chunk.decode("utf-8", "ignore")
 
                 if "OK" in response:
                     return response.strip()
@@ -301,8 +368,9 @@ class SIM7600:
         """
         response = self.send_at(f"AT+CFUN={fun}", timeout=10000)
         if "OK" in response:
-            time.sleep(2)
+            time.sleep(0.5)
             return True
+        self._log(f"AT+CFUN={fun} failed: {response[:60]}")
         return False
 
     def get_network_registration(self) -> tuple[int, int]:
@@ -399,7 +467,7 @@ class SIM7600:
                 self._log(f"Network check: CREG={stat}, CGREG={gprs_stat}")
                 last_check = elapsed
 
-            time.sleep(2)
+            time.sleep(1)
 
         self._log("Network registration timeout")
         self._log("Diagnostics:")
@@ -442,6 +510,9 @@ class SIM7600:
     def restart_modem(self) -> bool:
         """Restart modem (required after clearing PDP contexts).
 
+        After AT+CFUN=1,1, the modem resets to its NVRAM baud rate.
+        Auto-detects the baud rate after restart.
+
         Returns:
             True if restart successful and modem is ready
         """
@@ -452,24 +523,30 @@ class SIM7600:
             self._log("Modem restart command failed")
             return False
 
-        self._log("Modem restarting, waiting 20s...")
+        self._log("Modem restarting, auto-detecting baud...")
 
-        # Wait for modem to fully restart
-        time.sleep(15)
+        # Auto-detect baud rate after restart
+        baud_rates = list(dict.fromkeys([self.baudrate, 460800, 230400, 115200]))
 
-        # Wait for modem to respond to AT commands
-        for attempt in range(10):
-            try:
-                resp = self.send_at("AT", timeout=3000)
-                if "OK" in resp:
-                    self._log(f"Modem ready after {(attempt + 1) * 3}s")
-                    time.sleep(2)  # Extra stabilization time
-                    return True
-            except Exception:
-                pass
-            time.sleep(3)
+        for baud in baud_rates:
+            self.uart.init(baud, bits=8, parity=None, stop=1)
+            time.sleep(0.5)
+            for attempt in range(10):
+                time.sleep(1)
+                try:
+                    resp = self._send_at_simple("AT", timeout=1000)
+                    if "OK" in resp:
+                        self.baudrate = baud
+                        self._log(f"Modem ready after restart at {baud} baud")
+                        time.sleep(5)  # Phone stack stabilization
+                        return True
+                except Exception:
+                    pass
+                # Don't try same baud for too long
+                if attempt >= 3:
+                    break
 
-        self._log("Modem did not respond after restart")
+        self._log("Modem did not respond after restart at any baud rate")
         return False
 
     def activate_pdp(self) -> bool:
@@ -542,26 +619,6 @@ class SIM7600:
             self._log("Network registration failed")
             return False
 
-        # Clear unnecessary PDP contexts and restart modem
-        # Fixes issue where IMS context (cid=2) interferes with data connection
-        self.clear_pdp_contexts()
-
-        if not self.restart_modem():
-            self._log("Modem restart failed")
-            return False
-
-        # Re-enable phone function after restart
-        self._log("Re-enabling phone function after restart...")
-        if not self.set_phone_function(1):
-            self._log("Failed to re-enable phone function")
-            return False
-
-        # Wait for network registration after restart
-        self._log("Waiting for network after restart...")
-        if not self.wait_for_network(timeout_ms):
-            self._log("Network registration failed after restart")
-            return False
-
         self._log(f"Setting APN: {apn}")
         if not self.set_apn(apn):
             self._log("Failed to set APN")
@@ -569,11 +626,49 @@ class SIM7600:
 
         self._log("Activating PDP...")
         if not self.activate_pdp():
-            self._log("Failed to activate PDP")
-            return False
+            self._log("PDP activation failed, trying with context clear + restart...")
+
+            # Clear unnecessary PDP contexts (IMS context can interfere)
+            self.clear_pdp_contexts()
+
+            if not self.restart_modem():
+                self._log("Modem restart failed")
+                return False
+
+            # Re-enter PIN (may be needed after restart)
+            if pin:
+                self._log(f"Re-entering PIN after restart...")
+                self.set_pin(pin)
+            time.sleep(1)
+
+            # Re-enable phone function
+            self._log("Re-enabling phone function...")
+            resp = self.send_at("AT+CFUN=1", timeout=10000)
+            if "OK" in resp:
+                self._log("Phone function set")
+            elif "ERROR" in resp:
+                self._log("AT+CFUN=1 returned ERROR (continuing)")
+            time.sleep(0.5)
+
+            # Wait for network after restart
+            self._log("Waiting for network after restart...")
+            if not self.wait_for_network(timeout_ms):
+                self._log("Network registration failed after restart")
+                return False
+
+            # Re-set APN and try PDP again
+            self._log(f"Re-setting APN: {apn}")
+            if not self.set_apn(apn):
+                self._log("Failed to re-set APN")
+                return False
+
+            self._log("Re-activating PDP...")
+            if not self.activate_pdp():
+                self._log("PDP activation failed after restart")
+                return False
 
         # Open network service (required for TCP/IP operations)
-        time.sleep(2)
+        time.sleep(0.5)
         if not self.open_network():
             self._log("Failed to open network service")
             return False
@@ -582,7 +677,7 @@ class SIM7600:
         self._log("Waiting for IP address...")
         ip_addr = None
         for attempt in range(5):
-            time.sleep(2)
+            time.sleep(1)
             ip_addr = self.get_ip_address()
             if ip_addr:
                 self._log(f"LTE IP: {ip_addr} (after {attempt + 1} attempts)")

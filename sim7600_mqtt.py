@@ -172,27 +172,29 @@ class SIM7600MQTT:
         return self.sim.send_at(cmd, timeout)
 
     def _send_data(self, data: bytes, timeout: int = 10000) -> str:
-        """Send raw bytes via AT+CIPSEND."""
-        # Clear UART buffer
-        while self.sim.uart.any():
-            self.sim.uart.read(100)
-        time.sleep(0.1)
+        """Send raw bytes via AT+CIPSEND.
+
+        Optimized for 460800+ baud: reduced sleeps and faster polling.
+        """
+        # Drain UART — incoming +IPD is auto-captured by _incoming_handler
+        self.sim._drain_uart()
+        time.sleep(0.02)
 
         # Send CIPSEND command
         cmd = f"AT+CIPSEND=0,{len(data)}"
         self.sim.uart.write(cmd.encode() + b"\r\n")
-        time.sleep(0.3)
+        time.sleep(0.03)
 
-        # Wait for '>' prompt
+        # Wait for '>' prompt (max 2s — at 460800 baud this comes within ~100ms)
         start = time.ticks_ms()
         got_prompt = False
-        while time.ticks_diff(time.ticks_ms(), start) < 5000:
+        while time.ticks_diff(time.ticks_ms(), start) < 2000:
             if self.sim.uart.any():
-                resp = self.sim.uart.read(200)
+                resp = self.sim.uart.read(256)
                 if resp and b">" in resp:
                     got_prompt = True
                     break
-            time.sleep(0.1)
+            time.sleep(0.01)
 
         if not got_prompt:
             self._log("Connection lost - no > prompt")
@@ -201,14 +203,14 @@ class SIM7600MQTT:
 
         # Send binary data immediately after prompt
         self.sim.uart.write(data)
-        time.sleep(0.2)
+        time.sleep(0.02)
 
         # Wait for SEND OK or +CIPSEND confirmation
         start = time.ticks_ms()
         response = b""
         while time.ticks_diff(time.ticks_ms(), start) < timeout:
             if self.sim.uart.any():
-                chunk = self.sim.uart.read(200)
+                chunk = self.sim.uart.read(256)
                 if chunk:
                     response += chunk
             # SIM7600 returns +CIPSEND: 0,49,49 instead of SEND OK
@@ -217,7 +219,7 @@ class SIM7600MQTT:
             if b"ERROR" in response or b"SEND FAIL" in response:
                 self._log("Send error")
                 return "ERROR"
-            time.sleep(0.1)
+            time.sleep(0.01)
 
         self._log("Send timeout")
         return "TIMEOUT"
@@ -295,13 +297,16 @@ class SIM7600MQTT:
         """Connect to MQTT broker."""
         self._log(f"Connecting to {self.server}:{self.port}...")
 
+        # Register incoming data handler so +IPD is captured during AT commands
+        self.sim._incoming_handler = self._extract_incoming
+
         # Close any existing connection
         self._send_at("AT+CIPCLOSE=0", timeout=3000)
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         # Set CIPSENDMODE to 0 (don't wait for TCP ACK)
         self._send_at("AT+CIPSENDMODE=0", timeout=3000)
-        time.sleep(0.1)
+        time.sleep(0.05)
 
         # Resolve hostname
         self._server_ip = self._resolve_ip()
@@ -320,7 +325,7 @@ class SIM7600MQTT:
 
         # Wait for +CIPOPEN: 0,0 (connection established)
         # The OK just means command accepted, we need the URC
-        time.sleep(1)
+        time.sleep(0.5)
         for attempt in range(10):
             if self.sim.uart.any():
                 try:
@@ -339,7 +344,7 @@ class SIM7600MQTT:
                                     return False
                 except Exception:
                     pass
-            time.sleep(0.5)
+            time.sleep(0.2)
 
         # Build and send CONNECT packet
         connect_packet = _build_connect(
@@ -361,8 +366,8 @@ class SIM7600MQTT:
 
         # The CONNACK might already be in the buffer from the send response
         # Check if there's data available
-        time.sleep(0.5)
-        connack = self._receive_data(timeout=5000)
+        time.sleep(0.1)
+        connack = self._receive_data(timeout=3000)
 
         if connack and len(connack) >= 2:
             # Look for CONNACK packet (0x20)
@@ -399,7 +404,7 @@ class SIM7600MQTT:
 
         while time.ticks_diff(time.ticks_ms(), start) < timeout:
             if self.sim.uart.any():
-                chunk = self.sim.uart.read(200)
+                chunk = self.sim.uart.read(256)
                 if chunk:
                     response += chunk
 
@@ -433,7 +438,7 @@ class SIM7600MQTT:
 
         self._packet_id += 1
         packet = _build_publish(topic, msg, qos, retain, self._packet_id)
-        result = self._send_data(packet, timeout=10000)
+        result = self._send_data(packet, timeout=5000)
         if result == "OK":
             return True
         self._log(f"Publish failed: {result}")
@@ -461,7 +466,9 @@ class SIM7600MQTT:
     def check_msg(self) -> None:
         """Check for incoming messages.
 
-        Uses AT+CIPRXGET to explicitly request incoming data from SIM7600.
+        +IPD data is proactively captured by _drain_uart() via _incoming_handler,
+        so most messages are already in _pending_messages before this is called.
+        AT+CIPRXGET is used as a fallback poll with a short timeout.
         """
         if not self.connected:
             return
@@ -472,27 +479,17 @@ class SIM7600MQTT:
             self._send_data(_build_pingreq(), timeout=3000)
             self._last_ping = now
 
-        # Method 1: Check UART buffer for unsolicited +IPD data
-        response = b""
-        while self.sim.uart.any():
-            chunk = self.sim.uart.read(200)
-            if chunk:
-                response += chunk
-            time.sleep(0.01)
+        # Drain UART — _incoming_handler auto-captures +IPD data
+        self.sim._drain_uart()
 
-        if response and b"+IPD" in response:
-            self._extract_incoming(response)
-
-        # Method 2: Explicitly request incoming data with CIPRXGET
+        # Fallback: explicitly poll for incoming data with short timeout
+        # Most data arrives unsolicited and is captured above
         try:
-            rx_resp = self._send_at("AT+CIPRXGET=2,0,512", timeout=500)
+            rx_resp = self._send_at("AT+CIPRXGET=2,0,512", timeout=200)
             if "+CIPRXGET:" in rx_resp and len(rx_resp) > 20:
-                # Parse the response to extract MQTT data
-                # Format: +CIPRXGET: 2,0,<len>\r\n<data>\r\nOK
                 lines = rx_resp.split("\n")
                 for i, line in enumerate(lines):
                     if "+CIPRXGET:" in line:
-                        # Data is on the next line(s)
                         data_lines = []
                         for j in range(i + 1, len(lines)):
                             if "OK" in lines[j]:

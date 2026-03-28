@@ -90,11 +90,11 @@ RECONNECT_DELAY_S = 5
 TEMP_CONVERSION_TIME_MS = 750  # DS18B20 conversion time
 SENSOR_RETRY_INTERVAL_MS = 60000  # Retry failed sensor init every 60s
 
-# MQTT Timing Delays (increased for LTE/SSL stability)
-MQTT_DELAY_DISCOVERY = 0.8  # Between discovery publishes
-MQTT_DELAY_CONNECT = 2.0  # After connect, before subscribe
-MQTT_DELAY_SUBSCRIBE = 1.0  # After subscribe, before discovery
-MQTT_DELAY_INITIAL_STATE = 1.0  # After discovery, before initial state
+# MQTT Timing Delays (reduced with faster UART)
+MQTT_DELAY_DISCOVERY = 0.5  # Between discovery publishes
+MQTT_DELAY_CONNECT = 0.5  # After connect, before subscribe
+MQTT_DELAY_SUBSCRIBE = 0.3  # After subscribe, before discovery
+MQTT_DELAY_INITIAL_STATE = 0.5  # After discovery, before initial state
 MQTT_LOOP_DELAY = 0.05  # Main loop iteration delay (fast for LTE)
 ERROR_DELAY_SHORT = 1.0  # After minor error
 ERROR_DELAY_LONG = 3.0  # After serious error/connection lost
@@ -113,7 +113,7 @@ LTE_ENABLED = True
 LTE_UART_ID = 0
 LTE_TX_PIN = 0  # GP0 → SIM7600 RXD (NOTE: TX/RX crossed!)
 LTE_RX_PIN = 1  # GP1 → SIM7600 TXD
-LTE_BAUD = 115200  # Default baud rate
+LTE_BAUD = 460800  # Balanced speed/reliability (460800 may have signal issues)
 LTE_APN = "internet"  # O2 APN
 
 LTE_CONNECT_TIMEOUT_MS = 90000
@@ -127,8 +127,8 @@ SIGNAL_UPDATE_INTERVAL_MS = 10000  # 10 seconds
 NETWORK_INFO_UPDATE_INTERVAL_MS = 300000
 
 # Connection Priority (try first, fallback second)
-PRIMARY_CONNECTION = "WIFI"
-FALLBACK_CONNECTION = "LTE"
+PRIMARY_CONNECTION = "LTE"
+FALLBACK_CONNECTION = "WIFI"
 
 # -----------------------------------------------------------------------------
 # LTE/GPS/Network MQTT Topics
