@@ -513,6 +513,7 @@ class SIM7600MQTT:
         # Log first packet type
         packet_type = data[0] >> 4
         packet_names = {
+            2: "CONNACK",
             3: "PUBLISH",
             9: "SUBACK",
             13: "PINGRESP",
