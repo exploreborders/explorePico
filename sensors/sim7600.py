@@ -268,10 +268,8 @@ class SIM7600:
             return "ERROR"
 
         try:
-            # Drain buffer — NOTE: any +IPD data here will be lost.
-            # Incoming messages should be checked via check_msg() before calling send_at.
-            while self.uart.any():
-                self.uart.read(256)
+            # Drain buffer — route +IPD data to _incoming_handler so MQTT messages aren't lost
+            self._drain_uart()
             time.sleep(0.05)
             self.uart.write(command.encode() + b"\r\n")
             start = time.ticks_ms()
@@ -282,6 +280,8 @@ class SIM7600:
                     try:
                         data = self.uart.read(256)
                         if data:
+                            if self._incoming_handler:
+                                self._incoming_handler(data)
                             response += data.decode("utf-8", "ignore")
                     except UnicodeError:
                         # Corrupted data at wrong baud rate — drain and retry

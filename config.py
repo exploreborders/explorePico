@@ -95,7 +95,7 @@ MQTT_DELAY_DISCOVERY = 1.0  # Between discovery publishes (increased for HA)
 MQTT_DELAY_CONNECT = 0.5  # After connect, before subscribe
 MQTT_DELAY_SUBSCRIBE = 0.5  # After subscribe, before discovery
 MQTT_DELAY_INITIAL_STATE = 1.0  # After discovery, before initial state
-MQTT_LOOP_DELAY = 0.05  # Main loop iteration delay (prevent UART flooding)
+MQTT_LOOP_DELAY = 0.05  # Main loop iteration delay (20 checks/sec)
 ERROR_DELAY_SHORT = 1.0  # After minor error
 ERROR_DELAY_LONG = 3.0  # After serious error/connection lost
 

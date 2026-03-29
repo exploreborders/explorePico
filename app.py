@@ -675,7 +675,7 @@ def handle_sensor_publish() -> None:
     # Use different intervals based on connection type
     interval = SENSOR_UPDATE_INTERVAL_MS
     if connection_type == "LTE":
-        interval = 5000  # 5 seconds for LTE (4x baud = faster than before)
+        interval = 1000  # 5 seconds for LTE (4x baud = faster than before)
     elif connection_type == "WiFi":
         interval = SENSOR_UPDATE_INTERVAL_MS  # 1 second for WiFi (fast sockets)
 
@@ -742,7 +742,7 @@ def handle_gps_publish() -> None:
     now = time.ticks_ms()
     # Use different intervals based on connection type
     if connection_type == "LTE":
-        interval = 5000  # 5 seconds for LTE (faster UART)
+        interval = 10000  # 10 seconds for LTE (slower GPS updates to reduce UART load)
     elif connection_type == "WiFi":
         interval = GPS_UPDATE_INTERVAL_MS  # 1 second for WiFi (fast sockets)
     else:
@@ -787,14 +787,14 @@ def run_main_loop() -> None:
 
         # Send all outgoing data without intermediate message checks
         # The SIM7600 buffers incoming data, nothing is lost
-        handle_sensor_publish()
-        handle_connection_type_publish()
-        handle_lte_signal_publish()
-        handle_lte_network_publish()
-        handle_gps_publish()
+        #handle_sensor_publish()
+        #handle_connection_type_publish()
+        #handle_lte_signal_publish()
+        #handle_lte_network_publish()
+        #handle_gps_publish()
 
         # Final check for any messages that arrived during the publish batch
-        handle_mqtt_message()
+        #handle_mqtt_message()
 
         time.sleep(MQTT_LOOP_DELAY)
 
