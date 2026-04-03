@@ -64,7 +64,6 @@ except Exception:
     FALLBACK_CONNECTION = "WIFI"
 
 CONNECTION_TYPE = None
-lte_connected = False
 
 
 def connect_lte() -> bool:
@@ -73,8 +72,6 @@ def connect_lte() -> bool:
     Returns:
         True if connected
     """
-    global lte_connected
-
     if not LTE_ENABLED:
         return False
 
@@ -93,7 +90,6 @@ def connect_lte() -> bool:
             rts_pin=LTE_RTS_PIN,
             cts_pin=LTE_CTS_PIN,
         ):
-            lte_connected = True
             return True
     except Exception as e:
         log("LTE", f"Connection failed: {e}")
@@ -156,9 +152,6 @@ def try_primary_connection() -> bool:
     return False
 
 
-github_updated = False
-update_check_executed = False
-
 log(f"Primary: {PRIMARY_CONNECTION}, Fallback: {FALLBACK_CONNECTION}")
 
 if not try_primary_connection():
@@ -179,12 +172,7 @@ if CONNECTION_TYPE:
         try:
             from github_updater import check_and_update
 
-            update_check_executed = True
-            github_updated = check_and_update(GITHUB_OWNER, GITHUB_REPO)
-
-            if github_updated:
-                log("GitHub update applied, rebooting...")
-            else:
+            if not check_and_update(GITHUB_OWNER, GITHUB_REPO):
                 log("No GitHub update available")
         except Exception as e:
             log(f"GitHub update check failed: {e}")

@@ -30,21 +30,10 @@ try:
 except Exception:
     is_lte_connected = None
 
-try:
-    from secrets import GITHUB_TOKEN
-except ImportError:
-    GITHUB_TOKEN = None
-
-
-def get_headers() -> dict:
-    """Get HTTP headers with optional auth token."""
-    headers = {
-        "Accept": "application/vnd.github+json",
-        "User-Agent": "Pico2W-MQTT-Client",
-    }
-    if GITHUB_TOKEN:
-        headers["Authorization"] = f"token {GITHUB_TOKEN}"
-    return headers
+_HEADERS = {
+    "Accept": "application/vnd.github+json",
+    "User-Agent": "Pico2W-MQTT-Client",
+}
 
 
 def get_latest_release_tag(owner: str, repo: str) -> str | None:
@@ -55,7 +44,7 @@ def get_latest_release_tag(owner: str, repo: str) -> str | None:
 
     try:
         url = f"https://api.github.com/repos/{owner}/{repo}/releases/latest"
-        response = requests.get(url, headers=get_headers(), timeout=10)
+        response = requests.get(url, headers=_HEADERS, timeout=10)
 
         if response.status_code == 200:
             data = ujson.loads(response.text)
@@ -73,14 +62,15 @@ def get_latest_release_tag(owner: str, repo: str) -> str | None:
         return None
 
 
-def get_file_list(owner: str, repo: str, ref: str) -> list | None:
-    """Get list of files from repository."""
+def get_file_list(owner: str, repo: str, ref: str, path: str = "") -> list | None:
+    """Get list of files from repository at the given path."""
     if requests is None:
         return None
 
     try:
-        url = f"https://api.github.com/repos/{owner}/{repo}/contents?ref={ref}"
-        response = requests.get(url, headers=get_headers(), timeout=10)
+        content_path = f"/{path}" if path else ""
+        url = f"https://api.github.com/repos/{owner}/{repo}/contents{content_path}?ref={ref}"
+        response = requests.get(url, headers=_HEADERS, timeout=10)
 
         if response.status_code == 200:
             return ujson.loads(response.text)
@@ -95,30 +85,30 @@ def get_raw_url(owner: str, repo: str, path: str, ref: str) -> str:
     return f"https://raw.githubusercontent.com/{owner}/{repo}/{ref}/{path}"
 
 
-def get_all_files(owner: str, repo: str, ref: str, seen: set = None) -> list:
+def get_all_files(owner: str, repo: str, ref: str, seen: set = None, path: str = "") -> list:
     """Recursively get all .py and version.txt files from repository."""
     if seen is None:
         seen = set()
 
     files = []
-    contents = get_file_list(owner, repo, ref)
+    contents = get_file_list(owner, repo, ref, path)
 
     if not contents:
         return files
 
     for item in contents:
         name = item.get("name", "")
-        path = item.get("path", "")
+        item_path = item.get("path", "")
         item_type = item.get("type", "")
 
         if item_type == "file" and (name.endswith(".py") or name == "version.txt"):
-            if path in seen:
+            if item_path in seen:
                 continue
-            seen.add(path)
-            files.append({"path": path, "raw_url": get_raw_url(owner, repo, path, ref)})
+            seen.add(item_path)
+            files.append({"path": item_path, "raw_url": get_raw_url(owner, repo, item_path, ref)})
         elif item_type == "dir" and name not in [".git", ".vscode", "__pycache__"]:
-            sub_path = f"{ref}/{name}" if ref else name
-            sub_files = get_all_files(owner, repo, sub_path, seen)
+            dir_path = f"{path}/{name}" if path else name
+            sub_files = get_all_files(owner, repo, ref, seen, dir_path)
             files.extend(sub_files)
 
     return files
@@ -130,7 +120,7 @@ def download_file(url: str) -> str | None:
         return None
 
     try:
-        response = requests.get(url, timeout=30)
+        response = requests.get(url, headers=_HEADERS, timeout=30)
         if response.status_code == 200:
             return response.text
         return None
@@ -260,7 +250,7 @@ def check_and_update(owner: str, repo: str, progress_callback=None) -> bool:
     if result <= 0:
         log("No update needed")
         if progress_callback:
-            progress_callback(100, "up to date")
+            progress_callback(100, "up_to_date")
         return False
 
     log(f"Update available: {new_version}")

@@ -302,48 +302,6 @@ class SIM7600:
             self._log(f"AT send error [{command[:30]}]: {type(e).__name__}: {e}")
             return "ERROR"
 
-    def send_data(self, data: str, timeout: int = 5000) -> str:
-        """Send raw data (for MQTT topic/payload input).
-
-        Used after AT commands that expect data input (e.g., AT+CMQTTTOPIC).
-
-        Args:
-            data: Data to send
-            timeout: Timeout in milliseconds
-
-        Returns:
-            Response string
-        """
-        if not self.uart:
-            return "ERROR"
-
-        try:
-            self.uart.write(data.encode())
-            time.sleep(0.1)
-            self.uart.write(b"\r\n")
-
-            start = time.ticks_ms()
-            response = ""
-
-            while time.ticks_diff(time.ticks_ms(), start) < timeout:
-                if self.uart.any():
-                    # Read in chunks for better throughput
-                    chunk = self.uart.read(256)
-                    if chunk:
-                        response += chunk.decode("utf-8", "ignore")
-
-                if "OK" in response:
-                    return response.strip()
-
-                if "ERROR" in response:
-                    return "ERROR"
-
-            return response.strip() if response else "ERROR"
-
-        except Exception as e:
-            self._log(f"Data send error: {e}")
-            return "ERROR"
-
     # -------------------------------------------------------------------------
     # LTE / Network Functions
     # -------------------------------------------------------------------------
@@ -367,10 +325,9 @@ class SIM7600:
         """
         response = self.send_at("AT+CPIN?")
         if "+CPIN:" in response:
-            start = response.find('"') + 1
-            end = response.find('"', start)
-            if start > 0 and end > start:
-                return response[start:end]
+            for line in response.split("\n"):
+                if "+CPIN:" in line:
+                    return line.split(":", 1)[1].strip()
         return "UNKNOWN"
 
     def set_phone_function(self, fun: int = 1) -> bool:
@@ -746,7 +703,7 @@ class SIM7600:
         except Exception:
             pass
 
-        # Method 2: AT+CGCONTRDP (detailed PDP context)
+        # Method 3: AT+CGCONTRDP (detailed PDP context)
         try:
             response = self.send_at("AT+CGCONTRDP=1", timeout=3000)
             # Response: +CGCONTRDP: 1,5,"internet",...,10.1.1.1,...
@@ -1022,72 +979,6 @@ class SIM7600:
             self._log(f"CGPSINFO parse error: {e}")
             return None
 
-        try:
-            data_start = response.rfind(":") + 1
-            data = response[data_start:].strip()
-
-            if not data or "," not in data:
-                return None
-
-            parts = data.split(",")
-
-            # Check for valid data (empty means no fix)
-            if len(parts) < 4 or not parts[0].strip():
-                return None
-
-            # Parse latitude
-            lat_raw = parts[0].strip()
-            lat_dir = parts[1].strip()
-            lat = self._convert_nmea_lat(lat_raw, lat_dir)
-
-            # Parse longitude
-            lon_raw = parts[2].strip()
-            lon_dir = parts[3].strip()
-            lon = self._convert_nmea_lon(lon_raw, lon_dir)
-
-            # Validate coordinates
-            if not (-90 <= lat <= 90 and -180 <= lon <= 180):
-                return None
-
-            # Parse altitude (not provided by CGPSINFO)
-            alt = 0.0
-
-            # Parse speed (km/h)
-            speed = 0.0
-            if len(parts) > 6 and parts[6].strip():
-                try:
-                    speed = float(parts[6].strip())
-                except ValueError:
-                    pass
-
-            # Parse course (degrees)
-            course = 0.0
-            if len(parts) > 7 and parts[7].strip():
-                try:
-                    course = float(parts[7].strip())
-                except ValueError:
-                    pass
-
-            return {
-                "latitude": lat,
-                "longitude": lon,
-                "altitude": alt,
-                "speed": round(speed, 1),
-                "course": round(course, 1),
-                "pdop": 0.0,
-                "hdop": 0.0,
-                "vdop": 0.0,
-                "satellites": 0,
-                "satellites_gps": 0,
-                "satellites_glonass": 0,
-                "satellites_beidou": 0,
-                "source": "CGPSINFO",
-            }
-
-        except Exception as e:
-            self._log(f"CGPSINFO parse error: {e}")
-            return None
-
     def get_gps_location(self, timeout_ms: int = 5000) -> dict | None:
         """Get GPS location.
 
@@ -1217,7 +1108,7 @@ class SIM7600:
             date_str = parts[4].strip()
             utc_time = parts[5].strip()
 
-            if not date_str or not utc_time or date_str == "":
+            if not date_str or not utc_time:
                 return None
 
             hour = int(utc_time[0:2])

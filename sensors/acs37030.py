@@ -83,28 +83,6 @@ class ACS37030:
         self.is_pico_adc = is_pico_adc
         self.last_value: float | None = None
 
-    def calibrate_zero(self, samples: int = 10) -> float:
-        """Calibrate zero point by averaging readings at zero current.
-
-        Args:
-            samples: Number of samples to average
-
-        Returns:
-            Calibrated zero point voltage
-        """
-        readings = []
-        for _ in range(samples):
-            v = self.read_voltage()
-            if v is not None:
-                readings.append(v)
-            time.sleep(0.05)
-
-        if readings:
-            measured_zero = sum(readings) / len(readings)
-            self.zero_point_offset = measured_zero - self.zero_point
-            return measured_zero
-        return self.zero_point
-
     def read_voltage(self) -> float | None:
         """Read voltage from ADC.
 
@@ -195,11 +173,8 @@ class ACS37030Manager:
         else:
             print(f"[{self.name}] {message}")
 
-    def init(self, auto_calibrate: bool = False) -> bool:
-        """Initialize sensor with retry logic and optional auto-calibration.
-
-        Args:
-            auto_calibrate: If True, calibrate zero point on first init
+    def init(self) -> bool:
+        """Initialize sensor with retry logic.
 
         Returns:
             True if initialization successful
@@ -209,7 +184,7 @@ class ACS37030Manager:
         if self._initialized:
             return True
 
-        if time.ticks_diff(now, self._last_init) < self.retry_interval_ms:
+        if self._last_init != 0 and time.ticks_diff(now, self._last_init) < self.retry_interval_ms:
             return False
 
         self._last_init = now
@@ -218,13 +193,6 @@ class ACS37030Manager:
             self._initialized = True
             self._ever_connected = True
             self._log("Initialized successfully")
-
-            if auto_calibrate:
-                self._log("Calibrating zero point...")
-                measured = self.sensor.calibrate_zero(samples=10)
-                offset = self.sensor.zero_point_offset
-                self._log(f"Zero point: {measured:.3f}V (offset: {offset:.3f}V)")
-
             return True
 
         self._log("Init failed! Retrying...")

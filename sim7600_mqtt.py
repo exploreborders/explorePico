@@ -168,7 +168,11 @@ class SIM7600MQTT:
         self._pending_messages_max = 20
 
     def _log(self, msg: str) -> None:
-        print(f"[MQTT] {msg}")
+        try:
+            from updater_utils import log
+            log("MQTT", msg)
+        except Exception:
+            print(f"[MQTT] {msg}")
 
     def _send_at(self, cmd: str, timeout: int = 5000) -> str:
         return self.sim.send_at(cmd, timeout)
@@ -392,15 +396,9 @@ class SIM7600MQTT:
                             self._log(f"CONNACK error: {return_code}")
                             break
 
-        # If no CONNACK found, connection might still be okay
-        # Check broker logs to confirm
-        self._log("No CONNACK parsed - checking connection...")
-        # Assume success if no error received
-        self.connected = True
-        self._last_ping = time.ticks_ms()
-        self._got_response = True
-        self._log("Connection assumed successful (check broker logs)")
-        return True
+        self._log("No CONNACK received — connection failed")
+        self._send_at("AT+CIPCLOSE=0", timeout=3000)
+        return False
 
     def _receive_data(self, timeout: int = 5000) -> bytes | None:
         """Receive data from SIM7600.
@@ -594,8 +592,30 @@ class SIM7600MQTT:
         """Ping broker."""
         return self.connected
 
+    def is_connection_alive(self) -> bool:
+        """Verify TCP connection is still alive via AT command.
 
-class MQTTClient(SIM7600MQTT):
-    """Alias for compatibility with umqtt.simple."""
+        Checks the status of TCP connection 0 to detect silent drops.
+        This is called periodically from the main loop to catch
+        connection issues before they cause publish/subscribe failures.
 
-    pass
+        Returns:
+            True if TCP connection is still active
+        """
+        if not self.connected:
+            return False
+
+        try:
+            resp = self._send_at("AT+CIPSTATUS=0", timeout=3000)
+            # SIM7600 returns connection status
+            # "STATE: IP INITIAL" or "STATE: IP CLOSED" means disconnected
+            # "STATE: IP CONNECTING" or "STATE: IP STATUS" means active
+            if "CLOSED" in resp or "IP INITIAL" in resp:
+                self._log("TCP connection closed")
+                self.connected = False
+                return False
+            return True
+        except Exception as e:
+            self._log(f"Connection check failed: {e}")
+            self.connected = False
+            return False

@@ -182,17 +182,6 @@ def get_lte_manager() -> SIM7600Manager | None:
     return _lte_manager
 
 
-def get_lte_ip_address() -> str | None:
-    """Get the LTE IP address.
-
-    Returns:
-        IP address string or None
-    """
-    if not _lte_manager:
-        return None
-    return _lte_manager.get_ip_address()
-
-
 def get_gps_location(timeout_ms: int = 2000) -> dict | None:
     """Get GPS location (single poll, waits for fix up to timeout).
 
@@ -391,7 +380,12 @@ def is_wifi_connected() -> bool:
     Returns:
         True if WiFi is connected
     """
-    return _is_network_available() and not is_lte_connected()
+    try:
+        import network
+        sta = network.WLAN(network.STA_IF)
+        return sta.isconnected()
+    except OSError:
+        return False
 
 
 def is_time_synced() -> bool:
