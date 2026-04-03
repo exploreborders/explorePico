@@ -964,14 +964,15 @@ def main() -> None:
                     mqtt_client = None
                     # Reset to allow reconnection attempts
                     lte_reconnect_attempts = 0
+                else:
+                    # Also check SIM7600MQTT connection state if available
+                    if hasattr(mqtt_client, 'is_connection_alive'):
+                        if not mqtt_client.is_connection_alive():
+                            log("MQTT", "LTE MQTT health check failed")
+                            disconnect_mqtt()
+                            mqtt_client = None
+                            lte_reconnect_attempts = 0
                 last_lte_health_check = now
-                # Also check SIM7600MQTT connection state if available
-                elif hasattr(mqtt_client, 'is_connection_alive'):
-                    if not mqtt_client.is_connection_alive():
-                        log("MQTT", "LTE MQTT health check failed")
-                        disconnect_mqtt()
-                        mqtt_client = None
-                        lte_reconnect_attempts = 0
 
         run_main_loop()
 
