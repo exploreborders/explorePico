@@ -442,6 +442,11 @@ def reconnect_if_needed() -> bool:
         _log("LTE", "Network reopen failed")
         return False
 
+    # Wait for TCP/IP stack to fully initialize after NETOPEN.
+    # The SIM7600 reports OK before the stack is actually usable.
+    _log("LTE", "Waiting for TCP stack to initialize...")
+    time_module.sleep(3)
+
     # Wait for IP
     ip = sim.get_ip_address()
     if ip:
