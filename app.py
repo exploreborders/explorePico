@@ -484,15 +484,26 @@ def on_message(topic: bytes, msg: bytes) -> None:
             if msg_str in ("PRESS", "INSTALL") and update_state == "Update Pico":
                 log("UPDATE", "Starting update from HA...")
 
+                # If on LTE, temporarily connect WiFi for urequests
+                was_on_lte = LTE_AVAILABLE and is_lte_connected()
+                if was_on_lte:
+                    log("UPDATE", "On LTE, connecting WiFi for update...")
+                    if not ensure_wifi():
+                        log("UPDATE", "WiFi connection failed, cannot update")
+                        update_state = "Update Pico"
+                        return
+
                 # Progress callback for update process
                 def progress_callback(percent: int, status: str) -> None:
                     global update_state
                     update_state = status
                     current = read_version() or "0.0"
                     latest = latest_version_received or current
-                    in_progress = status not in ("up_to_date", "error")
                     publish_version(
-                        current, latest, in_progress, percent if in_progress else None
+                        current,
+                        latest,
+                        percent if status == "downloading" else None,
+                        in_progress=status == "downloading",
                     )
 
                 # Start update process
@@ -504,19 +515,29 @@ def on_message(topic: bytes, msg: bytes) -> None:
                     log("UPDATE", f"Update error: {e}")
                     success = False
                     update_state = "Update Pico"
+                finally:
+                    # Drop WiFi if we were on LTE — main loop will restore LTE
+                    if was_on_lte:
+                        log("UPDATE", "Dropping WiFi, returning to LTE...")
+                        try:
+                            import network
+
+                            network.WLAN(network.STA_IF).disconnect()
+                        except Exception:
+                            pass
 
                 # This only runs if update failed (no reboot)
                 if not success:
                     current = read_version() or "0.0"
                     latest = latest_version_received or current
                     if update_state == "up_to_date":
-                        publish_version(current, latest, False, 100)
+                        publish_version(current, latest, 100)
                         time.sleep(5)
-                        publish_version(current, latest, False)
+                        publish_version(current, latest)
                     else:
-                        publish_version(current, latest, False, 0)
+                        publish_version(current, latest, 0)
                         time.sleep(5)
-                        publish_version(current, latest, False)
+                        publish_version(current, latest)
                     update_state = "Update Pico"
 
         elif topic_str == TOPIC_UPDATE_LATEST:
