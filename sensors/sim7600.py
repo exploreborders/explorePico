@@ -534,15 +534,28 @@ class SIM7600:
     def open_network(self) -> bool:
         """Open network/socket service (required for TCP/IP).
 
+        Closes any existing session first, then retries up to 3 times.
+
         Returns:
             True if successful
         """
         self._log("Opening network service...")
-        response = self.send_at("AT+NETOPEN", timeout=15000)
-        if "OK" in response or "+NETOPEN:" in response:
-            self._log("Network service opened")
-            return True
-        self._log(f"Network open failed: {response[:30]}")
+
+        # Close first in case it's already open from a stale session
+        self._log("Closing any existing network service...")
+        self.send_at("AT+NETCLOSE", timeout=5000)
+        time.sleep(1)
+
+        # Retry opening up to 3 times
+        for attempt in range(3):
+            response = self.send_at("AT+NETOPEN", timeout=15000)
+            if "OK" in response or "+NETOPEN:" in response:
+                self._log("Network service opened")
+                return True
+            self._log(f"Network open attempt {attempt + 1}/3 failed: {response[:50]}")
+            time.sleep(2)
+
+        self._log("Network open failed after 3 attempts")
         return False
 
     def close_network(self) -> bool:

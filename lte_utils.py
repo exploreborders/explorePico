@@ -382,6 +382,7 @@ def is_wifi_connected() -> bool:
     """
     try:
         import network
+
         sta = network.WLAN(network.STA_IF)
         return sta.isconnected()
     except OSError:
@@ -403,6 +404,9 @@ def get_time_sync_source() -> str | None:
 def reconnect_if_needed() -> bool:
     """Reconnect to LTE if not connected.
 
+    Uses a lightweight reconnect that doesn't restart the modem.
+    Only reopens the network service and PDP context.
+
     Returns:
         True if connected or reconnected
     """
@@ -411,14 +415,39 @@ def reconnect_if_needed() -> bool:
     if is_lte_connected():
         return True
 
-    if not _lte_manager:
+    if not _lte_manager or not _lte_manager.sim:
         return False
 
-    _log("LTE", "Reconnecting...")
+    sim = _lte_manager.sim
 
-    if _lte_manager.connect():
-        _log("LTE", "Reconnected")
+    # Check if modem is still responsive
+    resp = sim.send_at("AT", timeout=2000)
+    if "OK" not in resp:
+        _log("LTE", "Modem not responsive, full reconnect needed")
+        return False
+
+    _log("LTE", "Reconnecting data session...")
+
+    # Close and reopen network service
+    sim.send_at("AT+NETCLOSE", timeout=5000)
+    time_module.sleep(1)
+
+    # Reactivate PDP
+    if not sim.activate_pdp():
+        _log("LTE", "PDP reactivation failed")
+        return False
+
+    # Reopen network service
+    if not sim.open_network():
+        _log("LTE", "Network reopen failed")
+        return False
+
+    # Wait for IP
+    ip = sim.get_ip_address()
+    if ip:
+        _log("LTE", f"Reconnected with IP: {ip}")
+        sim.lte_connected = True
         return True
 
-    _log("LTE", "Reconnection failed")
+    _log("LTE", "Reconnection failed - no IP")
     return False

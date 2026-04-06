@@ -170,6 +170,7 @@ class SIM7600MQTT:
     def _log(self, msg: str) -> None:
         try:
             from updater_utils import log
+
             log("MQTT", msg)
         except Exception:
             print(f"[MQTT] {msg}")
@@ -370,31 +371,43 @@ class SIM7600MQTT:
             self._send_at("AT+CIPCLOSE=0", timeout=3000)
             return False
 
-        # Check for CONNACK in the send response buffer
-        # CONNACK format: 0x20 0x02 [session] [return_code]
-        # If we see 0x20 0x02 0x00 0x00, connection succeeded
-        # If we see 0x20 0x02 0x00 0x01+, connection failed
+        # Wait briefly for CONNACK to arrive via UART
+        time.sleep(0.3)
 
-        # The CONNACK might already be in the buffer from the send response
-        # Check if there's data available
-        time.sleep(0.1)
-        connack = self._receive_data(timeout=3000)
+        # Drain UART to capture CONNACK into _pending_messages
+        self.sim._drain_uart()
 
-        if connack and len(connack) >= 2:
-            # Look for CONNACK packet (0x20)
-            for i in range(len(connack) - 1):
-                if connack[i] == 0x20:  # CONNACK packet type
-                    if i + 3 < len(connack):
-                        return_code = connack[i + 3]
-                        if return_code == 0:
-                            self.connected = True
-                            self._last_ping = time.ticks_ms()
-                            self._got_response = True
-                            self._log("Connected to MQTT broker!")
-                            return True
-                        else:
-                            self._log(f"CONNACK error: {return_code}")
-                            break
+        # Check _pending_messages for CONNACK (it was extracted by _drain_uart)
+        for msg in self._pending_messages:
+            if len(msg) >= 4 and msg[0] == 0x20:  # CONNACK packet
+                return_code = msg[3]
+                if return_code == 0:
+                    self.connected = True
+                    self._last_ping = time.ticks_ms()
+                    self._got_response = True
+                    # Remove CONNACK from pending
+                    self._pending_messages.remove(msg)
+                    self._log("Connected to MQTT broker!")
+                    return True
+                else:
+                    self._log(f"CONNACK error: {return_code}")
+                    self._send_at("AT+CIPCLOSE=0", timeout=3000)
+                    return False
+
+        # Also try _receive_data as fallback (in case CONNACK wasn't extracted)
+        connack = self._receive_data(timeout=2000)
+        if connack and len(connack) >= 4 and connack[0] == 0x20:
+            return_code = connack[3]
+            if return_code == 0:
+                self.connected = True
+                self._last_ping = time.ticks_ms()
+                self._got_response = True
+                self._log("Connected to MQTT broker!")
+                return True
+            else:
+                self._log(f"CONNACK error: {return_code}")
+                self._send_at("AT+CIPCLOSE=0", timeout=3000)
+                return False
 
         self._log("No CONNACK received — connection failed")
         self._send_at("AT+CIPCLOSE=0", timeout=3000)

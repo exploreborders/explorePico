@@ -497,7 +497,9 @@ def on_message(topic: bytes, msg: bytes) -> None:
 
                 # Start update process
                 try:
-                    success = check_and_update(GITHUB_OWNER, GITHUB_REPO, progress_callback)
+                    success = check_and_update(
+                        GITHUB_OWNER, GITHUB_REPO, progress_callback
+                    )
                 except Exception as e:
                     log("UPDATE", f"Update error: {e}")
                     success = False
@@ -600,12 +602,15 @@ def connect_mqtt() -> bool:
         mqtt_client = create_mqtt_client()
 
         # Check if connect() succeeds
-        # umqtt.simple returns 0 for success, not True!
+        # umqtt.simple returns 0 (CONNACK code) on success; SIM7600MQTT returns True.
+        # Both raise exceptions on failure — caught below.
         try:
             log("MQTT", f"Attempting connection to {MQTT_BROKER}:{MQTT_PORT}...")
-            # umqtt.simple returns 0 (CONNACK code) on success; SIM7600MQTT returns True.
-            # Both raise exceptions on failure — caught below.
-            mqtt_client.connect()
+            connected = mqtt_client.connect()
+            if not connected:
+                log("MQTT", "Connection failed!")
+                mqtt_client = None
+                return False
         except Exception as e:
             log("MQTT", f"Connection error: {e}")
             mqtt_client = None
@@ -663,6 +668,8 @@ def disconnect_mqtt() -> None:
 # -----------------------------------------------------------------------------
 def handle_mqtt_message() -> None:
     """Check for and handle incoming MQTT messages."""
+    if mqtt_client is None:
+        return
     mqtt_client.check_msg()
 
 
@@ -797,9 +804,10 @@ def run_main_loop() -> None:
             log("LTE", "Attempting LTE reconnection after error...")
             if reconnect_if_needed():
                 log("LTE", "LTE reconnected after error")
-                lte_reconnect_attempts = 0
+                _lte_was_connected = True
                 return  # Continue to next iteration
             log("LTE", "LTE reconnection failed after error")
+            _lte_was_connected = False
 
         time.sleep(ERROR_DELAY_LONG)
 
@@ -822,9 +830,10 @@ def run_main_loop() -> None:
                 log("LTE", "Attempting LTE reconnection after SSL error...")
                 if reconnect_if_needed():
                     log("LTE", "LTE reconnected after SSL error")
-                    lte_reconnect_attempts = 0
+                    _lte_was_connected = True
                     return  # Continue to next iteration
                 log("LTE", "LTE reconnection failed after SSL error")
+                _lte_was_connected = False
 
             time.sleep(ERROR_DELAY_LONG)
         else:
@@ -855,15 +864,28 @@ def main() -> None:
     last_time_sync_retry = 0
     TIME_SYNC_RETRY_INTERVAL_MS = 300000  # Retry every 5 minutes
 
-    # LTE health check state
-    last_lte_health_check = 0
-    LTE_HEALTH_CHECK_INTERVAL_MS = 30000  # Check every 30 seconds
+    # LTE reconnection state
     lte_reconnect_attempts = 0
     MAX_LTE_RECONNECT_ATTEMPTS = 3
+    _lte_was_connected = False  # Track LTE state without polling
 
     while True:
         # Check LTE first, only use WiFi as fallback
-        if LTE_AVAILABLE and is_lte_connected():
+        # Only call is_lte_connected() when we need to verify state
+        # (avoids UART contention with SIM7600MQTT)
+        if LTE_AVAILABLE:
+            if _lte_was_connected:
+                # Assume LTE is still connected unless proven otherwise
+                lte_ok = True
+            else:
+                # Need to check - LTE was not connected before
+                lte_ok = is_lte_connected()
+                if lte_ok:
+                    _lte_was_connected = True
+        else:
+            lte_ok = False
+
+        if lte_ok:
             # Try to sync time if not yet synced or retry interval passed
             if not time_synced:
                 now = time.ticks_ms()
@@ -888,6 +910,7 @@ def main() -> None:
         else:
             # LTE not connected, try to reconnect before falling back to WiFi
             if LTE_AVAILABLE:
+                _lte_was_connected = False
                 if lte_reconnect_attempts < MAX_LTE_RECONNECT_ATTEMPTS:
                     lte_reconnect_attempts += 1
                     log(
@@ -901,8 +924,11 @@ def main() -> None:
                         disconnect_mqtt()
                         mqtt_client = None
                         lte_reconnect_attempts = 0
+                        _lte_was_connected = True
                         continue  # Skip WiFi, continue with LTE
-                    log("LTE", f"Reconnection failed (attempt {lte_reconnect_attempts})")
+                    log(
+                        "LTE", f"Reconnection failed (attempt {lte_reconnect_attempts})"
+                    )
                 else:
                     log(
                         "LTE",
@@ -953,26 +979,6 @@ def main() -> None:
                     reconnect_count = 0
                 continue
             reconnect_count = 0
-
-        # Periodic LTE health check (only when on LTE connection)
-        if LTE_AVAILABLE and connection_type == "LTE":
-            now = time.ticks_ms()
-            if time.ticks_diff(now, last_lte_health_check) >= LTE_HEALTH_CHECK_INTERVAL_MS:
-                if not is_lte_connected():
-                    log("LTE", "Health check failed - connection dropped")
-                    disconnect_mqtt()
-                    mqtt_client = None
-                    # Reset to allow reconnection attempts
-                    lte_reconnect_attempts = 0
-                else:
-                    # Also check SIM7600MQTT connection state if available
-                    if hasattr(mqtt_client, 'is_connection_alive'):
-                        if not mqtt_client.is_connection_alive():
-                            log("MQTT", "LTE MQTT health check failed")
-                            disconnect_mqtt()
-                            mqtt_client = None
-                            lte_reconnect_attempts = 0
-                last_lte_health_check = now
 
         run_main_loop()
 
