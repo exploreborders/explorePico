@@ -184,7 +184,10 @@ class ACS37030Manager:
         if self._initialized:
             return True
 
-        if self._last_init != 0 and time.ticks_diff(now, self._last_init) < self.retry_interval_ms:
+        if (
+            self._last_init != 0
+            and time.ticks_diff(now, self._last_init) < self.retry_interval_ms
+        ):
             return False
 
         self._last_init = now
@@ -224,8 +227,3 @@ class ACS37030Manager:
     def ever_connected(self) -> bool:
         """Check if sensor was ever connected."""
         return self._ever_connected
-
-    @property
-    def is_initialized(self) -> bool:
-        """Check if sensor is currently initialized."""
-        return self._initialized

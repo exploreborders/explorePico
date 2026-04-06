@@ -659,6 +659,12 @@ class SIM7600:
             self._log("Failed to open network service")
             return False
 
+        # Wait for TCP/IP stack to fully initialize after NETOPEN.
+        # The SIM7600 reports OK before the stack is actually usable,
+        # causing AT+CIPOPEN to fail immediately after.
+        self._log("Waiting for TCP stack to initialize...")
+        time.sleep(3)
+
         # Wait for IP address to be assigned (can take a few seconds)
         self._log("Waiting for IP address...")
         ip_addr = None

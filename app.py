@@ -414,17 +414,15 @@ def publish_led_state() -> None:
 
 
 def publish_version(
-    installed_version: str,
-    latest_version: str = None,
-    in_progress: bool = False,
-    percentage: int = None,
+    current_version: str,
+    latest_version: str | None = None,
+    percentage: int | None = None,
 ) -> None:
     """Publish version info to HA update entity.
 
     Args:
-        installed_version: Current installed firmware version
+        current_version: Current installed firmware version
         latest_version: Latest available version (from GitHub webhook)
-        in_progress: True if update is currently running
         percentage: Update progress 0-100 (optional)
     """
     global latest_version_received
@@ -433,11 +431,11 @@ def publish_version(
         latest_version_received = latest_version
 
     state = {
-        "installed_version": installed_version,
+        "installed_version": current_version,
         "latest_version": latest_version_received
         if latest_version_received
-        else installed_version,
-        "in_progress": in_progress,
+        else current_version,
+        "in_progress": False,
     }
 
     if percentage is not None:
@@ -685,11 +683,15 @@ def handle_sensor_publish() -> None:
         last_sensor_publish = now
 
 
-def handle_connection_type_publish() -> None:
-    """Publish connection type (LTE/WiFi/offline)."""
+def handle_connection_type_publish(lte_ok: bool) -> None:
+    """Publish connection type (LTE/WiFi/offline).
+
+    Args:
+        lte_ok: Cached LTE connection state (avoids UART polling).
+    """
     global connection_type
 
-    if LTE_AVAILABLE and is_lte_connected():
+    if LTE_AVAILABLE and lte_ok:
         connection_type = "LTE"
     elif is_connected():
         connection_type = "WiFi"
@@ -699,11 +701,15 @@ def handle_connection_type_publish() -> None:
     mqtt_publish(TOPIC_CONNECTION_TYPE, connection_type)
 
 
-def handle_lte_signal_publish() -> None:
-    """Publish LTE signal quality if LTE is connected."""
+def handle_lte_signal_publish(lte_ok: bool) -> None:
+    """Publish LTE signal quality if LTE is connected.
+
+    Args:
+        lte_ok: Cached LTE connection state (avoids UART polling).
+    """
     global last_signal_publish
 
-    if not LTE_AVAILABLE or not is_lte_connected():
+    if not LTE_AVAILABLE or not lte_ok:
         return
 
     now = time.ticks_ms()
@@ -718,11 +724,15 @@ def handle_lte_signal_publish() -> None:
         last_signal_publish = now
 
 
-def handle_lte_network_publish() -> None:
-    """Publish LTE network info if LTE is connected."""
+def handle_lte_network_publish(lte_ok: bool) -> None:
+    """Publish LTE network info if LTE is connected.
+
+    Args:
+        lte_ok: Cached LTE connection state (avoids UART polling).
+    """
     global last_network_publish
 
-    if not LTE_AVAILABLE or not is_lte_connected():
+    if not LTE_AVAILABLE or not lte_ok:
         return
 
     now = time.ticks_ms()
@@ -767,12 +777,15 @@ def handle_gps_publish() -> None:
         last_gps_publish = now
 
 
-def run_main_loop() -> None:
+def run_main_loop(lte_ok: bool) -> None:
     """Run the main MQTT loop.
 
     Optimized: calls check_msg() only twice per iteration (start + end)
     instead of after every single operation. Incoming messages are buffered
     by the SIM7600 and processed at the next check.
+
+    Args:
+        lte_ok: Cached LTE connection state (avoids UART polling).
     """
     global mqtt_client
 
@@ -783,9 +796,9 @@ def run_main_loop() -> None:
         # Send all outgoing data without intermediate message checks
         # The SIM7600 buffers incoming data, nothing is lost
         handle_sensor_publish()
-        handle_connection_type_publish()
-        handle_lte_signal_publish()
-        handle_lte_network_publish()
+        handle_connection_type_publish(lte_ok)
+        handle_lte_signal_publish(lte_ok)
+        handle_lte_network_publish(lte_ok)
         handle_gps_publish()
 
         # Final check for any messages that arrived during the publish batch
@@ -980,7 +993,7 @@ def main() -> None:
                 continue
             reconnect_count = 0
 
-        run_main_loop()
+        run_main_loop(lte_ok)
 
 
 if __name__ == "__main__":

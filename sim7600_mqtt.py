@@ -497,12 +497,14 @@ class SIM7600MQTT:
         self.sim._drain_uart()
 
         # Check keepalive SECOND — _last_rx is now current
+        # Ping at half the keepalive interval to ensure broker receives it
+        # before the 1.5x timeout (e.g., 60s keepalive → ping every 30s)
         now = time.ticks_ms()
-        if time.ticks_diff(now, self._last_ping) > (self.keepalive * 500):
+        if time.ticks_diff(now, self._last_ping) > (self.keepalive * 1000 // 2):
             if self._last_ping > 0 and not self._got_response:
                 self._log("No PINGRESP — broker disconnected")
                 self.connected = False
-                return
+                raise OSError("MQTT connection lost (no PINGRESP)")
             self._send_data(_build_pingreq(), timeout=3000)
             self._last_ping = now
             self._got_response = False

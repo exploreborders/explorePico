@@ -67,18 +67,10 @@ class ADS1115:
     MUX_SINGLE_2 = 0x6000
     MUX_SINGLE_3 = 0x7000
 
-    PGA_6_144V = 0x0000
     PGA_4_096V = 0x0200
-    PGA_2_048V = 0x0400
-    PGA_1_024V = 0x0600
-    PGA_0_512V = 0x0800
-    PGA_0_256V = 0x0A00
 
     MODE_SINGLE = 0x0100
 
-    DR_128SPS = 0x0000
-    DR_250SPS = 0x0020
-    DR_490SPS = 0x0040
     DR_920SPS = 0x0060
 
     def __init__(
@@ -141,23 +133,10 @@ class ADS1115:
         """Set programmable gain amplifier.
 
         Args:
-            gain: PGA setting (PGA_6_144V, PGA_4_096V, etc.)
+            gain: PGA setting (PGA_4_096V default)
         """
         self.gain = gain
-
-        # voltage_multiplier = FSR / 32768
-        if gain == self.PGA_6_144V:
-            self.voltage_multiplier = 6.144 / 32768  # 0.0001875
-        elif gain == self.PGA_4_096V:
-            self.voltage_multiplier = 4.096 / 32768  # 0.000125
-        elif gain == self.PGA_2_048V:
-            self.voltage_multiplier = 2.048 / 32768  # 0.0000625
-        elif gain == self.PGA_1_024V:
-            self.voltage_multiplier = 1.024 / 32768  # 0.00003125
-        elif gain == self.PGA_0_512V:
-            self.voltage_multiplier = 0.512 / 32768  # 0.000015625
-        elif gain == self.PGA_0_256V:
-            self.voltage_multiplier = 0.256 / 32768  # 0.000007813
+        self.voltage_multiplier = 4.096 / 32768  # 0.000125 for PGA_4_096V
 
     def _write_config(self, config: int) -> None:
         """Write configuration register."""
@@ -217,4 +196,3 @@ class ADS1115:
                 return None
 
         return None
-

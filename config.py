@@ -85,15 +85,13 @@ ACS37030_BUFFER_SIZE = (
 )
 
 # Timing
-SENSOR_UPDATE_INTERVAL_MS = 1000  # Reduced frequency for LTE (was 1000)
+SENSOR_UPDATE_INTERVAL_MS = 1000
 RECONNECT_DELAY_S = 5
 TEMP_CONVERSION_TIME_MS = 750  # DS18B20 conversion time
 SENSOR_RETRY_INTERVAL_MS = 60000  # Retry failed sensor init every 60s
 
 # MQTT Timing Delays (reduced with faster UART)
-MQTT_DELAY_DISCOVERY = 1.0  # Between discovery publishes (increased for HA)
 MQTT_DELAY_CONNECT = 0.5  # After connect, before subscribe
-MQTT_DELAY_SUBSCRIBE = 0.5  # After subscribe, before discovery
 MQTT_DELAY_INITIAL_STATE = 1.0  # After discovery, before initial state
 MQTT_LOOP_DELAY = 0.05  # Main loop iteration delay (20 checks/sec)
 ERROR_DELAY_SHORT = 1.0  # After minor error

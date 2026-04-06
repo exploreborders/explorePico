@@ -57,8 +57,6 @@ class DS18B20:
         self.ds = None
         self.roms = []
         self.last_values: list[float | None] = []
-        self._conversion_started = False
-        self._conversion_start_time = 0
         self._logger = print  # Default to print, can be overridden
 
     def set_logger(self, logger) -> None:
@@ -90,8 +88,6 @@ class DS18B20:
 
         try:
             self.ds.convert_temp()
-            self._conversion_started = True
-            self._conversion_start_time = time.ticks_ms()
             return True
         except Exception:
             return False
@@ -111,22 +107,14 @@ class DS18B20:
                 if temp != 85.0:
                     self.last_values[i] = round(temp, 1)
 
-            self._conversion_started = False
             return self.last_values
 
         except Exception:
-            self._conversion_started = False
             return self.last_values
 
     def get_last_values(self) -> list[float | None]:
         """Get last known temperature values."""
         return self.last_values
-
-    def get_last_value(self) -> float | None:
-        """Get last known temperature (for single sensor compatibility)."""
-        if self.last_values:
-            return self.last_values[0]
-        return None
 
 
 class DS18B20Manager:
