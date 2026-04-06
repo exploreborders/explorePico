@@ -328,9 +328,14 @@ class SIM7600MQTT:
             return False
         self._log(f"Resolved to {self._server_ip}")
 
-        # Open TCP connection
+        # Open TCP connection with retry (carrier data routing may not be ready)
         cmd = f'AT+CIPOPEN=0,"TCP","{self._server_ip}",{self.port}'
-        resp = self._send_at(cmd, timeout=15000)
+        for attempt in range(3):
+            resp = self._send_at(cmd, timeout=15000)
+            if "ERROR" not in resp:
+                break
+            self._log(f"TCP open attempt {attempt + 1}/3 failed, retrying...")
+            time.sleep(2)
 
         if "ERROR" in resp:
             self._log("TCP connection failed")
