@@ -61,7 +61,6 @@ try:
         init_gps,
         sync_time,
         get_lte_manager,
-        reconnect_if_needed,
     )
 
     LTE_AVAILABLE = True
@@ -499,11 +498,9 @@ def on_message(topic: bytes, msg: bytes) -> None:
                     update_state = status
                     current = read_version() or "0.0"
                     latest = latest_version_received or current
+                    in_progress = status not in ("up_to_date", "error")
                     publish_version(
-                        current,
-                        latest,
-                        percent if status == "downloading" else None,
-                        in_progress=status == "downloading",
+                        current, latest, in_progress, percent if in_progress else None
                     )
 
                 # Start update process
@@ -531,13 +528,13 @@ def on_message(topic: bytes, msg: bytes) -> None:
                     current = read_version() or "0.0"
                     latest = latest_version_received or current
                     if update_state == "up_to_date":
-                        publish_version(current, latest, 100)
+                        publish_version(current, latest, False, 100)
                         time.sleep(5)
-                        publish_version(current, latest)
+                        publish_version(current, latest, False)
                     else:
-                        publish_version(current, latest, 0)
+                        publish_version(current, latest, False, 0)
                         time.sleep(5)
-                        publish_version(current, latest)
+                        publish_version(current, latest, False)
                     update_state = "Update Pico"
 
         elif topic_str == TOPIC_UPDATE_LATEST:
@@ -627,9 +624,10 @@ def connect_mqtt() -> bool:
         # Both raise exceptions on failure — caught below.
         try:
             log("MQTT", f"Attempting connection to {MQTT_BROKER}:{MQTT_PORT}...")
-            connected = mqtt_client.connect()
-            if not connected:
-                log("MQTT", "Connection failed!")
+            result = mqtt_client.connect()
+            # 0 = success (CONNACK return code), True = success (SIM7600MQTT)
+            if result != 0 and result is not True:
+                log("MQTT", f"Connection failed! Result: {result}")
                 mqtt_client = None
                 return False
         except Exception as e:
@@ -818,18 +816,6 @@ def run_main_loop() -> None:
         log("WARN", f"Connection lost: {e}")
         blink_pattern("111")
         disconnect_mqtt()
-        mqtt_client = None
-
-        # If on LTE, try to reconnect before falling back
-        if LTE_AVAILABLE and connection_type == "LTE":
-            log("LTE", "Attempting LTE reconnection after error...")
-            if reconnect_if_needed():
-                log("LTE", "LTE reconnected after error")
-                _lte_was_connected = True
-                return  # Continue to next iteration
-            log("LTE", "LTE reconnection failed after error")
-            _lte_was_connected = False
-
         time.sleep(ERROR_DELAY_LONG)
 
     except Exception as e:
@@ -844,18 +830,6 @@ def run_main_loop() -> None:
             log("WARN", f"SSL/Connection error: {e}")
             blink_pattern("111")
             disconnect_mqtt()
-            mqtt_client = None
-
-            # If on LTE, try to reconnect before falling back
-            if LTE_AVAILABLE and connection_type == "LTE":
-                log("LTE", "Attempting LTE reconnection after SSL error...")
-                if reconnect_if_needed():
-                    log("LTE", "LTE reconnected after SSL error")
-                    _lte_was_connected = True
-                    return  # Continue to next iteration
-                log("LTE", "LTE reconnection failed after SSL error")
-                _lte_was_connected = False
-
             time.sleep(ERROR_DELAY_LONG)
         else:
             log("ERROR", f"Unexpected error: {e}")
@@ -866,10 +840,39 @@ def run_main_loop() -> None:
 # -----------------------------------------------------------------------------
 # ENTRY POINT
 # -----------------------------------------------------------------------------
+def try_time_sync() -> bool:
+    """Try to sync time via NTP.
+
+    Uses the unified sync_time() function from lte_utils which uses
+    NTP via WiFi or LTE connection.
+
+    Returns:
+        True if time was synced successfully
+    """
+    global time_synced
+
+    if time_synced:
+        return True
+
+    try:
+        # Use the unified sync_time() from lte_utils
+        if sync_time():
+            time_synced = True
+            log("TIME", "Time synced successfully")
+            return True
+    except Exception as e:
+        log("TIME", f"Time sync error: {e}")
+
+    return False
+
+
 def main() -> None:
     """Main entry point."""
     global last_sensor_publish, mqtt_client, _gps_available, time_synced
     global reconnect_count  # noqa: F821
+
+    # Import sync_time here to avoid circular imports
+    from lte_utils import sync_time as do_sync_time
 
     validate_config()
 
@@ -885,28 +888,9 @@ def main() -> None:
     last_time_sync_retry = 0
     TIME_SYNC_RETRY_INTERVAL_MS = 300000  # Retry every 5 minutes
 
-    # LTE reconnection state
-    lte_reconnect_attempts = 0
-    MAX_LTE_RECONNECT_ATTEMPTS = 3
-    _lte_was_connected = False  # Track LTE state without polling
-
     while True:
         # Check LTE first, only use WiFi as fallback
-        # Only call is_lte_connected() when we need to verify state
-        # (avoids UART contention with SIM7600MQTT)
-        if LTE_AVAILABLE:
-            if _lte_was_connected:
-                # Assume LTE is still connected unless proven otherwise
-                lte_ok = True
-            else:
-                # Need to check - LTE was not connected before
-                lte_ok = is_lte_connected()
-                if lte_ok:
-                    _lte_was_connected = True
-        else:
-            lte_ok = False
-
-        if lte_ok:
+        if LTE_AVAILABLE and is_lte_connected():
             # Try to sync time if not yet synced or retry interval passed
             if not time_synced:
                 now = time.ticks_ms()
@@ -918,7 +902,7 @@ def main() -> None:
                     log("TIME", "Attempting time sync...")
                     last_time_sync_retry = now
 
-                    if sync_time():
+                    if do_sync_time():
                         time_synced = True
                         time_sync_retry_count = 0
                     else:
@@ -929,34 +913,7 @@ def main() -> None:
                             f"will retry in {TIME_SYNC_RETRY_INTERVAL_MS // 1000}s",
                         )
         else:
-            # LTE not connected, try to reconnect before falling back to WiFi
-            if LTE_AVAILABLE:
-                _lte_was_connected = False
-                if lte_reconnect_attempts < MAX_LTE_RECONNECT_ATTEMPTS:
-                    lte_reconnect_attempts += 1
-                    log(
-                        "LTE",
-                        f"Connection lost, attempting reconnection "
-                        f"({lte_reconnect_attempts}/{MAX_LTE_RECONNECT_ATTEMPTS})...",
-                    )
-                    if reconnect_if_needed():
-                        log("LTE", "Reconnected successfully")
-                        # Reset MQTT to force recreation with new connection
-                        disconnect_mqtt()
-                        mqtt_client = None
-                        lte_reconnect_attempts = 0
-                        _lte_was_connected = True
-                        continue  # Skip WiFi, continue with LTE
-                    log(
-                        "LTE", f"Reconnection failed (attempt {lte_reconnect_attempts})"
-                    )
-                else:
-                    log(
-                        "LTE",
-                        f"Max reconnection attempts ({MAX_LTE_RECONNECT_ATTEMPTS}) "
-                        f"reached, falling back to WiFi",
-                    )
-
+            # LTE not connected, ensure WiFi
             if not ensure_wifi():
                 time.sleep(RECONNECT_DELAY_S)
                 continue
