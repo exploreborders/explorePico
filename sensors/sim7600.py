@@ -288,15 +288,14 @@ class SIM7600:
                         response_buf.extend(data)
 
                 if expected_bytes in response_buf:
-                    return response_buf.decode("utf-8", "ignore").strip()
+                    return bytearray(b for b in response_buf if b < 0x80).decode("ascii").strip()
 
                 if b"ERROR" in response_buf or b"CME ERROR" in response_buf:
                     return "ERROR"
 
-            response = response_buf.decode("utf-8", "ignore")
+            response = bytearray(b for b in response_buf if b < 0x80).decode("ascii")
             if response:
-                safe = "".join(c for c in response[:100] if ord(c) >= 32)
-                self._log(f"AT response: {safe}")
+                self._log(f"AT response: {response[:100]}")
             return response.strip() if response else "ERROR"
 
         except Exception as e:
