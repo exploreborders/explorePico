@@ -64,7 +64,7 @@ try:
     )
 
     LTE_AVAILABLE = True
-except Exception:
+except ImportError:
     LTE_AVAILABLE = False
     sync_time = None
     get_lte_manager = None
@@ -252,7 +252,10 @@ def mqtt_publish(topic: str, value: str, retain: bool = True) -> bool:
 
     key = (topic, retain)
     if _last_mqtt_values.get(key) != value:
-        mqtt_client.publish(topic, value, retain=retain)
+        try:
+            mqtt_client.publish(topic, value, retain=retain)
+        except (OSError, AttributeError):
+            return False
         _last_mqtt_values[key] = value
         return True
     return False
@@ -442,7 +445,12 @@ def publish_version(
     if percentage is not None:
         state["update_percentage"] = percentage
 
-    mqtt_client.publish(TOPIC_UPDATE_STATE, ujson.dumps(state), retain=True)
+    if mqtt_client is None:
+        return
+    try:
+        mqtt_client.publish(TOPIC_UPDATE_STATE, ujson.dumps(state), retain=True)
+    except OSError:
+        pass
 
 
 def update_version_received(latest: str) -> None:
@@ -520,7 +528,7 @@ def on_message(topic: bytes, msg: bytes) -> None:
                             import network
 
                             network.WLAN(network.STA_IF).disconnect()
-                        except Exception:
+                        except OSError:
                             pass
 
                 # This only runs if update failed (no reboot)

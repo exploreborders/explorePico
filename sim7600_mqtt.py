@@ -576,10 +576,13 @@ class SIM7600MQTT:
                     self._got_response = True
                     self._log("PINGRESP received")
                 # Advance past entire packet (parse remaining_length)
+                # MQTT varint is at most 4 bytes — cap loop to avoid infinite scan on malformed data
                 pos = i + 1
                 remaining = 0
                 multiplier = 1
-                while pos < len(data):
+                for _ in range(4):
+                    if pos >= len(data):
+                        break
                     byte = data[pos]
                     remaining += (byte & 0x7F) * multiplier
                     multiplier *= 128
@@ -594,11 +597,14 @@ class SIM7600MQTT:
                 qos = (data[i] >> 1) & 0x03
 
                 # Parse remaining length (variable-length encoding)
+                # MQTT varint is at most 4 bytes — cap loop to avoid infinite scan on malformed data
                 remaining_length = 0
                 multiplier = 1
                 length_bytes = 0
                 pos = i + 1
-                while pos < len(data):
+                for _ in range(4):
+                    if pos >= len(data):
+                        break
                     byte = data[pos]
                     remaining_length += (byte & 0x7F) * multiplier
                     multiplier *= 128

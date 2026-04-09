@@ -35,7 +35,7 @@ try:
     from lte_utils import sync_time
 
     LTE_AVAILABLE = True
-except Exception:
+except ImportError:
     LTE_AVAILABLE = False
     sync_time = None
 
@@ -57,7 +57,7 @@ try:
         PRIMARY_CONNECTION,
         FALLBACK_CONNECTION,
     )
-except Exception:
+except ImportError:
     GITHUB_UPDATES_ENABLED = False
     LTE_ENABLED = False
     PRIMARY_CONNECTION = "LTE"

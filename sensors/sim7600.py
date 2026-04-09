@@ -100,8 +100,8 @@ class SIM7600:
         if data and self._incoming_handler:
             try:
                 self._incoming_handler(data)
-            except Exception:
-                pass
+            except Exception as e:
+                self._log(f"Handler error: {e}")
         return data
 
     def _send_at_simple(self, command: str, timeout: int = 1000) -> str:
@@ -130,7 +130,7 @@ class SIM7600:
 
             return response.strip()
 
-        except Exception:
+        except (OSError, UnicodeError):
             return ""
 
     def init(self) -> bool:
@@ -161,7 +161,7 @@ class SIM7600:
                         rxbuf=4096,
                     )
                 self.uart.init(baud, bits=8, parity=None, stop=1)
-            except Exception:
+            except OSError:
                 return False
 
             time.sleep(0.5)
@@ -273,27 +273,24 @@ class SIM7600:
             time.sleep(0.05)
             self.uart.write(command.encode() + b"\r\n")
             start = time.ticks_ms()
-            response = ""
+            response_buf = bytearray()
+            expected_bytes = expected.encode()
 
             while time.ticks_diff(time.ticks_ms(), start) < timeout:
                 if self.uart.any():
-                    try:
-                        data = self.uart.read(256)
-                        if data:
-                            if self._incoming_handler:
-                                self._incoming_handler(data)
-                            response += data.decode("utf-8", "ignore")
-                    except UnicodeError:
-                        # Corrupted data at wrong baud rate — drain and retry
-                        self._drain_uart()
-                        return "ERROR"
+                    data = self.uart.read(256)
+                    if data:
+                        if self._incoming_handler:
+                            self._incoming_handler(data)
+                        response_buf.extend(data)
 
-                if expected in response:
-                    return response.strip()
+                if expected_bytes in response_buf:
+                    return response_buf.decode("utf-8", "ignore").strip()
 
-                if "ERROR" in response or "CME ERROR" in response:
+                if b"ERROR" in response_buf or b"CME ERROR" in response_buf:
                     return "ERROR"
 
+            response = response_buf.decode("utf-8", "ignore")
             if response:
                 self._log(f"AT response: {response[:100]}")
             return response.strip() if response else "ERROR"
@@ -513,7 +510,7 @@ class SIM7600:
                         self._log(f"Modem ready after restart at {baud} baud")
                         time.sleep(5)  # Phone stack stabilization
                         return True
-                except Exception:
+                except OSError:
                     pass
                 # Don't try same baud for too long
                 if attempt >= 3:
@@ -697,7 +694,7 @@ class SIM7600:
                             ip = parts[1].strip()
                             if ip and "." in ip and ip != "0.0.0.0":
                                 return ip
-        except Exception:
+        except (OSError, ValueError):
             pass
 
         # Method 2: AT+CGPADDR (standard, most reliable)
@@ -713,7 +710,7 @@ class SIM7600:
                             ip = parts[1].strip()
                             if ip and "." in ip and ip != "0.0.0.0":
                                 return ip
-        except Exception:
+        except (OSError, ValueError):
             pass
 
         # Method 3: AT+CGCONTRDP (detailed PDP context)
@@ -735,7 +732,7 @@ class SIM7600:
                                 ):
                                     if part != "0.0.0.0":
                                         return part
-        except Exception:
+        except (OSError, ValueError):
             pass
 
         return None
@@ -1089,7 +1086,7 @@ class SIM7600:
                 end = response.find('"', start)
                 if end > start:
                     return response[start:end]
-            except Exception:
+            except (TypeError, AttributeError):
                 pass
         return None
 
@@ -1133,7 +1130,7 @@ class SIM7600:
             year = int(date_str[4:6]) + 2000
 
             return (year, month, day, hour, minute, second)
-        except Exception:
+        except (ValueError, IndexError):
             return None
 
 
