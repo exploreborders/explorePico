@@ -236,6 +236,7 @@ last_gps_publish = 0
 _last_gps_fix: dict | None = None
 last_signal_publish = 0
 last_network_publish = 0
+last_connection_type_publish = 0
 connection_type = "offline"
 _gps_available = False
 
@@ -716,7 +717,11 @@ def handle_sensor_publish() -> None:
 
 def handle_connection_type_publish() -> None:
     """Publish connection type (LTE/WiFi/offline)."""
-    global connection_type
+    global connection_type, last_connection_type_publish
+
+    now = time.ticks_ms()
+    if time.ticks_diff(now, last_connection_type_publish) < SIGNAL_UPDATE_INTERVAL_MS:
+        return
 
     if LTE_AVAILABLE and is_lte_connected():
         connection_type = "LTE"
@@ -726,40 +731,45 @@ def handle_connection_type_publish() -> None:
         connection_type = "offline"
 
     mqtt_publish(TOPIC_CONNECTION_TYPE, connection_type)
+    last_connection_type_publish = now
 
 
 def handle_lte_signal_publish() -> None:
     """Publish LTE signal quality if LTE is connected."""
     global last_signal_publish
 
+    now = time.ticks_ms()
+    if time.ticks_diff(now, last_signal_publish) < SIGNAL_UPDATE_INTERVAL_MS:
+        return
+
     if not LTE_AVAILABLE or not is_lte_connected():
         return
 
-    now = time.ticks_ms()
-    if time.ticks_diff(now, last_signal_publish) >= SIGNAL_UPDATE_INTERVAL_MS:
-        signal = get_signal_info()
-        rssi = signal.get("rssi", 0)
-        if rssi == -999:
-            mqtt_publish(TOPIC_SIGNAL_RSSI, "unavailable")
-        else:
-            mqtt_publish(TOPIC_SIGNAL_RSSI, str(rssi))
-        mqtt_publish(TOPIC_SIGNAL_QUALITY, signal.get("quality", "unknown"))
-        last_signal_publish = now
+    signal = get_signal_info()
+    rssi = signal.get("rssi", 0)
+    if rssi == -999:
+        mqtt_publish(TOPIC_SIGNAL_RSSI, "unavailable")
+    else:
+        mqtt_publish(TOPIC_SIGNAL_RSSI, str(rssi))
+    mqtt_publish(TOPIC_SIGNAL_QUALITY, signal.get("quality", "unknown"))
+    last_signal_publish = now
 
 
 def handle_lte_network_publish() -> None:
     """Publish LTE network info if LTE is connected."""
     global last_network_publish
 
+    now = time.ticks_ms()
+    if time.ticks_diff(now, last_network_publish) < NETWORK_INFO_UPDATE_INTERVAL_MS:
+        return
+
     if not LTE_AVAILABLE or not is_lte_connected():
         return
 
-    now = time.ticks_ms()
-    if time.ticks_diff(now, last_network_publish) >= NETWORK_INFO_UPDATE_INTERVAL_MS:
-        network = get_network_info()
-        mqtt_publish(TOPIC_NETWORK_OPERATOR, network.get("operator", ""))
-        mqtt_publish(TOPIC_NETWORK_TYPE, network.get("type", ""))
-        last_network_publish = now
+    network = get_network_info()
+    mqtt_publish(TOPIC_NETWORK_OPERATOR, network.get("operator", ""))
+    mqtt_publish(TOPIC_NETWORK_TYPE, network.get("type", ""))
+    last_network_publish = now
 
 
 def handle_gps_publish() -> None:
@@ -826,7 +836,9 @@ def run_main_loop() -> None:
         log("WARN", f"Connection lost: {e}")
         blink_pattern("111")
         disconnect_mqtt()
-        time.sleep(ERROR_DELAY_LONG)
+        # OSError(-1) = broker closed connection (peer reset). Wait longer to
+        # let the broker expire the old session before reconnecting.
+        time.sleep(15.0 if e.args[0] == -1 else ERROR_DELAY_LONG)
 
     except Exception as e:
         err_str = str(e)
