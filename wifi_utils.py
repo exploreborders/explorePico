@@ -68,12 +68,18 @@ def scan_and_connect(
 
     wlan = get_wlan()
     wlan.active(True)
+    time.sleep(1)  # Allow radio to initialize before scanning
 
     # Scan for networks
     scan_results = wlan.scan()
 
-    # Extract available SSIDs
-    available_ssids = {result[0].decode("utf-8") for result in scan_results}
+    # Extract available SSIDs, skip any that can't be decoded
+    available_ssids = set()
+    for result in scan_results:
+        try:
+            available_ssids.add(result[0].decode("utf-8"))
+        except UnicodeError:
+            pass
 
     if log_fn:
         log_fn("WiFi", f"Found {len(available_ssids)} networks")
