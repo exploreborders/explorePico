@@ -312,22 +312,24 @@ def _sync_time_ntp() -> bool:
         _log("TIME", "No network connection for NTP sync")
         return False
 
-    # Try standard NTP first
-    try:
-        import ntptime
+    # Try standard NTP — cap socket wait to avoid hanging indefinitely
+    import ntptime
 
-        ntptime.host = "pool.ntp.org"
-        ntptime.settime()
+    for ntp_host in ("pool.ntp.org", "time.cloudflare.com"):
+        try:
+            ntptime.host = ntp_host
+            ntptime.timeout = 5
+            ntptime.settime()
 
-        now = time_module.localtime()
-        _log(
-            "TIME",
-            f"NTP synced: {now[0]}-{now[1]:02d}-{now[2]:02d} "
-            f"{now[3]:02d}:{now[4]:02d}:{now[5]:02d}",
-        )
-        return True
-    except Exception as e:
-        _log("TIME", f"NTP failed: {e}")
+            now = time_module.localtime()
+            _log(
+                "TIME",
+                f"NTP synced via {ntp_host}: {now[0]}-{now[1]:02d}-{now[2]:02d} "
+                f"{now[3]:02d}:{now[4]:02d}:{now[5]:02d}",
+            )
+            return True
+        except Exception as e:
+            _log("TIME", f"NTP {ntp_host} failed: {e}")
 
     # Fallback: Try to get time from LTE network (AT+CCLK)
     return _sync_time_from_network()
