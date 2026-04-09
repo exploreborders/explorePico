@@ -68,10 +68,14 @@ def scan_and_connect(
 
     wlan = get_wlan()
     wlan.active(True)
-    time.sleep(1)  # Allow radio to initialize before scanning
 
-    # Scan for networks
-    scan_results = wlan.scan()
+    # Retry scan — CYW43 radio can take a few seconds to be ready
+    scan_results = []
+    for _ in range(3):
+        time.sleep(1)
+        scan_results = wlan.scan()
+        if scan_results:
+            break
 
     # Extract available SSIDs, skip any that can't be decoded
     available_ssids = set()
