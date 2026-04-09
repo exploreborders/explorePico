@@ -295,7 +295,8 @@ class SIM7600:
 
             response = response_buf.decode("utf-8", "ignore")
             if response:
-                self._log(f"AT response: {response[:100]}")
+                safe = "".join(c for c in response[:100] if ord(c) >= 32)
+                self._log(f"AT response: {safe}")
             return response.strip() if response else "ERROR"
 
         except Exception as e:
