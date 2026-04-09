@@ -111,7 +111,7 @@ def connect_wifi() -> bool:
         if WIFI_SSID_2 and WIFI_PASSWORD_2:
             networks.append((WIFI_SSID_2, WIFI_PASSWORD_2))
 
-        if scan_and_connect(networks, log_fn=log):
+        if scan_and_connect(networks, timeout=30, log_fn=log):
             log("WiFi", "WiFi connected!")
             return True
 
