@@ -281,7 +281,10 @@ class SIM7600:
                     data = self.uart.read(256)
                     if data:
                         if self._incoming_handler:
-                            self._incoming_handler(data)
+                            try:
+                                self._incoming_handler(data)
+                            except UnicodeError:
+                                pass  # corrupt UART bytes — skip handler, data still buffered
                         response_buf.extend(data)
 
                 if expected_bytes in response_buf:
