@@ -670,7 +670,7 @@ def connect_mqtt() -> bool:
 
 def disconnect_mqtt() -> None:
     """Safely disconnect from MQTT broker."""
-    global mqtt_client
+    global mqtt_client, _last_mqtt_values
 
     if mqtt_client is not None:
         try:
@@ -680,6 +680,8 @@ def disconnect_mqtt() -> None:
             log("WARN", f"Disconnect error: {e}")
         finally:
             mqtt_client = None
+            # Clear cached values so all sensors are republished after reconnect
+            _last_mqtt_values.clear()
 
 
 # -----------------------------------------------------------------------------

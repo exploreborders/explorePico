@@ -454,8 +454,7 @@ class SIM7600MQTT:
     def publish(self, topic: str, msg: str, retain: bool = False, qos: int = 0) -> bool:
         """Publish message to topic."""
         if not self.connected:
-            self._log("Not connected")
-            return False
+            raise OSError("MQTT not connected")
 
         self._packet_id += 1
         packet = _build_publish(topic, msg, qos, retain, self._packet_id)
@@ -491,26 +490,59 @@ class SIM7600MQTT:
         and stored in _pending_messages before this is called.
         """
         if not self.connected:
-            return
+            raise OSError("MQTT not connected")
 
-        # Drain UART FIRST — updates _last_rx before keepalive check
-        self.sim._drain_uart()
-
-        # Check keepalive SECOND — _last_rx is now current
-        now = time.ticks_ms()
-        if time.ticks_diff(now, self._last_ping) > (self.keepalive * 500):
-            if self._last_ping > 0 and not self._got_response:
-                self._log("No PINGRESP — broker disconnected")
-                self.connected = False
-                return
-            self._send_data(_build_pingreq(), timeout=3000)
-            self._last_ping = now
-            self._got_response = False
-
-        # Process all pending messages
+        # Process all pending messages FIRST (sets _got_response for buffered PINGRESP)
         while self._pending_messages:
             mqtt_data = self._pending_messages.pop(0)
             self._parse_and_callback(mqtt_data)
+
+        # Drain UART (captures new data from SIM7600)
+        self.sim._drain_uart()
+
+        # Process newly arrived messages
+        while self._pending_messages:
+            mqtt_data = self._pending_messages.pop(0)
+            self._parse_and_callback(mqtt_data)
+
+        # Check keepalive: use full keepalive interval (not half)
+        now = time.ticks_ms()
+        ping_interval_ms = self.keepalive * 1000  # 60s = 60000ms
+
+        if time.ticks_diff(now, self._last_ping) > ping_interval_ms:
+            if self._last_ping > 0 and not self._got_response:
+                # Previous ping didn't get response — retry up to 2 times
+                for attempt in range(2):
+                    self._log(f"PINGRESP timeout, retry {attempt + 1}/2...")
+                    self._send_data(_build_pingreq(), timeout=3000)
+                    time.sleep(1.0)
+                    self.sim._drain_uart()
+                    if self._got_response:
+                        self._last_ping = now
+                        self._log("PINGRESP received on retry")
+                        break
+                else:
+                    # Only disconnect after all retries fail
+                    self._log("No PINGRESP after retries — broker disconnected")
+                    self.connected = False
+
+                    # Clean up: send DISCONNECT + close TCP so SIM7600 channel 0 is freed
+                    try:
+                        self._send_data(_build_disconnect(), timeout=2000)
+                    except Exception:
+                        pass
+                    try:
+                        self._send_at("AT+CIPCLOSE=0", timeout=3000)
+                    except Exception:
+                        pass
+
+                    raise OSError("PINGRESP timeout - broker disconnected")
+            else:
+                # Send new ping
+                self._send_data(_build_pingreq(), timeout=3000)
+                self._last_ping = now
+                self._got_response = False
+                self._log("PING sent, waiting for response...")
 
     def _parse_and_callback(self, data: bytes) -> None:
         """Parse MQTT packets and call callback for each PUBLISH.
@@ -532,11 +564,29 @@ class SIM7600MQTT:
         name = packet_names.get(packet_type, f"UNKNOWN({packet_type})")
         self._log(f"Packet: {name} ({len(data)} bytes)")
 
-        # Scan for all PUBLISH packets in buffer
+        # Scan for all packets in buffer
         i = 0
         while i < len(data):
-            if (data[i] >> 4) != MQTT_PUBLISH:
-                i += 1
+            packet_type = data[i] >> 4
+
+            # Skip any non-PUBLISH packet
+            if packet_type != MQTT_PUBLISH:
+                # For PINGRESP, set _got_response to indicate broker is alive
+                if packet_type == MQTT_PINGRESP:
+                    self._got_response = True
+                    self._log("PINGRESP received")
+                # Advance past entire packet (parse remaining_length)
+                pos = i + 1
+                remaining = 0
+                multiplier = 1
+                while pos < len(data):
+                    byte = data[pos]
+                    remaining += (byte & 0x7F) * multiplier
+                    multiplier *= 128
+                    pos += 1
+                    if (byte & 0x80) == 0:
+                        break
+                i = pos + remaining
                 continue
 
             try:
@@ -597,9 +647,14 @@ class SIM7600MQTT:
                 self._send_data(_build_disconnect(), timeout=3000)
             except Exception:
                 pass
-            self._send_at("AT+CIPCLOSE=0", timeout=3000)
+            try:
+                self._send_at("AT+CIPCLOSE=0", timeout=3000)
+            except Exception:
+                pass
             self.connected = False
             self._log("Disconnected")
+        # Clear pending messages from old connection
+        self._pending_messages.clear()
 
     def ping(self) -> bool:
         """Ping broker."""
