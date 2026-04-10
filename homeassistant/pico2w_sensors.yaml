@@ -6,12 +6,13 @@
 #   - Signal Quality (text)
 #   - Network Operator
 #   - Network Type
-#   - GPS (via device_tracker with JSON)
+#   - GPS (latitude, longitude, altitude, speed)
 #   - CPU Temperature
 #   - Room Temperature
 #   - Water Temperature
 #   - Current 1-5
 #   - LED Switch
+#   - Relay 1-4 Switches
 #
 # Installation:
 #   1. Copy this file to your Home Assistant config/packages/ directory
@@ -209,12 +210,138 @@ mqtt:
           - pico2w
         name: "Raspberry Pi Pico 2W"
 
+    # GPS Latitude
+    - name: "Pico GPS Latitude"
+      unique_id: "pico_gps_latitude"
+      state_topic: "homeassistant/device_tracker/pico2w/location"
+      value_template: "{{ value_json.latitude | default(0) }}"
+      unit_of_measurement: "°"
+      availability:
+        topic: "homeassistant/pico/availability"
+        payload_available: "online"
+        payload_not_available: "offline"
+      device:
+        identifiers:
+          - pico2w
+        name: "Raspberry Pi Pico 2W"
+
+    # GPS Longitude
+    - name: "Pico GPS Longitude"
+      unique_id: "pico_gps_longitude"
+      state_topic: "homeassistant/device_tracker/pico2w/location"
+      value_template: "{{ value_json.longitude | default(0) }}"
+      unit_of_measurement: "°"
+      availability:
+        topic: "homeassistant/pico/availability"
+        payload_available: "online"
+        payload_not_available: "offline"
+      device:
+        identifiers:
+          - pico2w
+        name: "Raspberry Pi Pico 2W"
+
+    # GPS Altitude
+    - name: "Pico GPS Altitude"
+      unique_id: "pico_gps_altitude"
+      state_topic: "homeassistant/device_tracker/pico2w/location"
+      value_template: "{{ value_json.altitude | default(0) }}"
+      unit_of_measurement: "m"
+      device_class: "distance"
+      availability:
+        topic: "homeassistant/pico/availability"
+        payload_available: "online"
+        payload_not_available: "offline"
+      device:
+        identifiers:
+          - pico2w
+        name: "Raspberry Pi Pico 2W"
+
+    # GPS Speed
+    - name: "Pico GPS Speed"
+      unique_id: "pico_gps_speed"
+      state_topic: "homeassistant/device_tracker/pico2w/location"
+      value_template: "{{ value_json.speed | default(0) }}"
+      unit_of_measurement: "km/h"
+      device_class: "speed"
+      availability:
+        topic: "homeassistant/pico/availability"
+        payload_available: "online"
+        payload_not_available: "offline"
+      device:
+        identifiers:
+          - pico2w
+        name: "Raspberry Pi Pico 2W"
+
   switch:
     # LED Switch
     - name: "Pico LED"
       unique_id: "pico_led"
       command_topic: "homeassistant/pico/switch/led/set"
       state_topic: "homeassistant/pico/switch/led/state"
+      payload_on: "ON"
+      payload_off: "OFF"
+      availability:
+        topic: "homeassistant/pico/availability"
+        payload_available: "online"
+        payload_not_available: "offline"
+      device:
+        identifiers:
+          - pico2w
+        name: "Raspberry Pi Pico 2W"
+
+    # Relay 1
+    - name: "Pico Relay 1"
+      unique_id: "pico_relay_1"
+      command_topic: "homeassistant/pico/switch/relay_1/set"
+      state_topic: "homeassistant/pico/switch/relay_1/state"
+      payload_on: "ON"
+      payload_off: "OFF"
+      availability:
+        topic: "homeassistant/pico/availability"
+        payload_available: "online"
+        payload_not_available: "offline"
+      device:
+        identifiers:
+          - pico2w
+        name: "Raspberry Pi Pico 2W"
+
+    # Relay 2
+    - name: "Pico Relay 2"
+      unique_id: "pico_relay_2"
+      command_topic: "homeassistant/pico/switch/relay_2/set"
+      state_topic: "homeassistant/pico/switch/relay_2/state"
+      payload_on: "ON"
+      payload_off: "OFF"
+      availability:
+        topic: "homeassistant/pico/availability"
+        payload_available: "online"
+        payload_not_available: "offline"
+      device:
+        identifiers:
+          - pico2w
+        name: "Raspberry Pi Pico 2W"
+
+    # Relay 3
+    - name: "Pico Relay 3"
+      unique_id: "pico_relay_3"
+      command_topic: "homeassistant/pico/switch/relay_3/set"
+      state_topic: "homeassistant/pico/switch/relay_3/state"
+      payload_on: "ON"
+      payload_off: "OFF"
+      availability:
+        topic: "homeassistant/pico/availability"
+        payload_available: "online"
+        payload_not_available: "offline"
+      device:
+        identifiers:
+          - pico2w
+        name: "Raspberry Pi Pico 2W"
+
+    # Relay 4
+    - name: "Pico Relay 4"
+      unique_id: "pico_relay_4"
+      command_topic: "homeassistant/pico/switch/relay_4/set"
+      state_topic: "homeassistant/pico/switch/relay_4/state"
       payload_on: "ON"
       payload_off: "OFF"
       availability:

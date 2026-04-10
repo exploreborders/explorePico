@@ -49,6 +49,7 @@ from blink import blink_pattern, led
 from wifi_utils import scan_and_connect, is_connected
 from updater_utils import log, read_version
 from github_updater import check_and_update
+from relay_utils import RelayManager
 from sensors import DS18B20, DS18B20Manager, ACS37030, ACS37030Manager
 from sensors.ads1115 import ADS1115
 
@@ -147,6 +148,18 @@ from config import (
     LTE_RTS_PIN,
     LTE_CTS_PIN,
     LTE_BAUD,
+    RELAY_1_PIN,
+    RELAY_2_PIN,
+    RELAY_3_PIN,
+    RELAY_4_PIN,
+    TOPIC_RELAY_1_COMMAND,
+    TOPIC_RELAY_1_STATE,
+    TOPIC_RELAY_2_COMMAND,
+    TOPIC_RELAY_2_STATE,
+    TOPIC_RELAY_3_COMMAND,
+    TOPIC_RELAY_3_STATE,
+    TOPIC_RELAY_4_COMMAND,
+    TOPIC_RELAY_4_STATE,
 )
 
 # -----------------------------------------------------------------------------
@@ -221,6 +234,23 @@ if ENABLE_ACS37030:
         log("Sensor 5 disabled in config (ENABLE_ACS37030_PICO_ADC = False)")
 
 led.off()
+
+relay_manager = RelayManager([RELAY_1_PIN, RELAY_2_PIN, RELAY_3_PIN, RELAY_4_PIN])
+relay_manager.set_logger(log)
+
+RELAY_COMMAND_TOPICS = [
+    TOPIC_RELAY_1_COMMAND,
+    TOPIC_RELAY_2_COMMAND,
+    TOPIC_RELAY_3_COMMAND,
+    TOPIC_RELAY_4_COMMAND,
+]
+
+RELAY_STATE_TOPICS = [
+    TOPIC_RELAY_1_STATE,
+    TOPIC_RELAY_2_STATE,
+    TOPIC_RELAY_3_STATE,
+    TOPIC_RELAY_4_STATE,
+]
 
 # MQTT state
 mqtt_client = None
@@ -487,6 +517,16 @@ def on_message(topic: bytes, msg: bytes) -> None:
             publish_led_state()
             log("LED", msg_str)
 
+        elif topic_str in RELAY_COMMAND_TOPICS:
+            relay_index = RELAY_COMMAND_TOPICS.index(topic_str)
+            if msg_str == "ON":
+                relay_manager.set_relay(relay_index, True)
+            elif msg_str == "OFF":
+                relay_manager.set_relay(relay_index, False)
+            state = "ON" if relay_manager.get_relay(relay_index) else "OFF"
+            mqtt_publish(RELAY_STATE_TOPICS[relay_index], state)
+            log("RELAY", f"Relay {relay_index + 1}: {state}")
+
         elif topic_str == TOPIC_UPDATE_CMD:
             # User clicked "Update installieren" in HA
             if msg_str in ("PRESS", "INSTALL") and update_state == "Update Pico":
@@ -654,10 +694,15 @@ def connect_mqtt() -> bool:
         mqtt_client.subscribe(TOPIC_LED_COMMAND)
         mqtt_client.subscribe(TOPIC_UPDATE_CMD)
         mqtt_client.subscribe(TOPIC_UPDATE_LATEST)
+        for topic in RELAY_COMMAND_TOPICS:
+            mqtt_client.subscribe(topic)
         log("MQTT", "Subscribed!")
 
         time.sleep(MQTT_DELAY_INITIAL_STATE)
         publish_led_state()
+        for i, topic in enumerate(RELAY_STATE_TOPICS):
+            state = "ON" if relay_manager.get_relay(i) else "OFF"
+            mqtt_publish(topic, state)
         # Initial version publish: read from flash and send to HA
         current_version = read_version() or "0.0"
         publish_version(current_version, current_version, False)

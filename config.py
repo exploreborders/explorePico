@@ -110,6 +110,26 @@ GITHUB_UPDATES_ENABLED = False  # Enable/disable GitHub OTA updates
 # Wiring: SIM7600 TXD→GP1, RXD→GP0, VIO→3V3, VBUS→5V
 # See AGENTS.md for complete wiring diagram
 LTE_ENABLED = True
+
+# -----------------------------------------------------------------------------
+# Relay Module Configuration (4-channel)
+# -----------------------------------------------------------------------------
+# Wiring: S1→GP6, S2→GP7, S3→GP8, S4→GP9
+# Relay module: PWR→5V, GND→GND
+RELAY_1_PIN = 6
+RELAY_2_PIN = 7
+RELAY_3_PIN = 8
+RELAY_4_PIN = 9
+
+# Relay MQTT Topics
+TOPIC_RELAY_1_COMMAND = "homeassistant/pico/switch/relay_1/set"
+TOPIC_RELAY_1_STATE = "homeassistant/pico/switch/relay_1/state"
+TOPIC_RELAY_2_COMMAND = "homeassistant/pico/switch/relay_2/set"
+TOPIC_RELAY_2_STATE = "homeassistant/pico/switch/relay_2/state"
+TOPIC_RELAY_3_COMMAND = "homeassistant/pico/switch/relay_3/set"
+TOPIC_RELAY_3_STATE = "homeassistant/pico/switch/relay_3/state"
+TOPIC_RELAY_4_COMMAND = "homeassistant/pico/switch/relay_4/set"
+TOPIC_RELAY_4_STATE = "homeassistant/pico/switch/relay_4/state"
 LTE_UART_ID = 0
 LTE_TX_PIN = 0  # GP0 → SIM7600 RXD (NOTE: TX/RX crossed!)
 LTE_RX_PIN = 1  # GP1 → SIM7600 TXD
@@ -273,6 +293,11 @@ def validate_config() -> bool:
         or LTE_CTS_PIN in (23, 24, 25, 29)
     ):
         errors.append("LTE_CTS_PIN must be 0-22 or 26-28 (23-25, 29 reserved)")
+
+    # Relay pins
+    for i, pin in enumerate([RELAY_1_PIN, RELAY_2_PIN, RELAY_3_PIN, RELAY_4_PIN], 1):
+        if not isinstance(pin, int) or pin < 0 or pin > 28 or pin in (23, 24, 25, 29):
+            errors.append(f"RELAY_{i}_PIN must be 0-22 or 26-28 (23-25, 29 reserved)")
 
     if errors:
         raise ValueError(
