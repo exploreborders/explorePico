@@ -828,26 +828,35 @@ def handle_gps_publish() -> None:
     interval = GPS_UPDATE_INTERVAL_MS
 
     if time.ticks_diff(now, last_gps_publish) >= interval:
-        # Poll GPS with timeout
         gps = get_gps_location()
 
-        # Cache last valid fix so we can republish even if GPS temporarily loses signal
         if gps and gps.get("latitude", 0) != 0 and gps.get("longitude", 0) != 0:
             _last_gps_fix = gps
-
-        # Publish from latest known fix
-        data = _last_gps_fix
-        if data:
-            # Bundle all GPS data into one JSON message
             gps_payload = ujson.dumps(
                 {
-                    "latitude": data.get("latitude", 0),
-                    "longitude": data.get("longitude", 0),
-                    "altitude": data.get("altitude", 0),
-                    "speed": data.get("speed", 0),
+                    "latitude": gps.get("latitude", 0),
+                    "longitude": gps.get("longitude", 0),
+                    "altitude": gps.get("altitude", 0),
+                    "speed": gps.get("speed", 0),
                 }
             )
-            mqtt_publish(TOPIC_DEVICE_TRACKER, gps_payload, retain=True)
+            try:
+                mqtt_client.publish(TOPIC_DEVICE_TRACKER, gps_payload, retain=True)
+            except (OSError, AttributeError):
+                pass
+        elif _last_gps_fix:
+            gps_payload = ujson.dumps(
+                {
+                    "latitude": _last_gps_fix.get("latitude", 0),
+                    "longitude": _last_gps_fix.get("longitude", 0),
+                    "altitude": _last_gps_fix.get("altitude", 0),
+                    "speed": _last_gps_fix.get("speed", 0),
+                }
+            )
+            try:
+                mqtt_client.publish(TOPIC_DEVICE_TRACKER, gps_payload, retain=True)
+            except (OSError, AttributeError):
+                pass
         last_gps_publish = now
 
 
