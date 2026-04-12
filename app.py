@@ -39,6 +39,7 @@ Environment:
 # IMPORTS
 # -----------------------------------------------------------------------------
 import time
+import math
 from umqtt.simple import MQTTClient
 import machine
 import ujson
@@ -52,6 +53,13 @@ from github_updater import check_and_update
 from relay_utils import RelayManager
 from sensors import DS18B20, DS18B20Manager, ACS37030, ACS37030Manager
 from sensors.ads1115 import ADS1115
+
+try:
+    from sensors.mma845x import MMA845XManager
+
+    MMA845X_AVAILABLE = True
+except ImportError:
+    MMA845X_AVAILABLE = False
 
 try:
     from lte_utils import (
@@ -105,6 +113,17 @@ from config import (
     ACS37030_NUM_SENSORS,
     ACS37030_PICO_ADC_PIN,
     ACS37030_BUFFER_SIZE,
+    ENABLE_MMA845X,
+    MMA845X_I2C_ID,
+    MMA845X_I2C_SDA_PIN,
+    MMA845X_I2C_SCL_PIN,
+    MMA845X_I2C_ADDRESS,
+    TOPIC_ACCEL_ROLL_STATE,
+    TOPIC_ACCEL_PITCH_STATE,
+    TOPIC_ACCEL_CALIBRATE,
+    TOPIC_ACCEL_CALIBRATE_STATE,
+    TOPIC_ACCEL_MEASURE_COMMAND,
+    TOPIC_ACCEL_MEASURE_STATE,
     GITHUB_OWNER,
     GITHUB_REPO,
     SENSOR_UPDATE_INTERVAL_MS,
@@ -238,6 +257,23 @@ led.off()
 relay_manager = RelayManager([RELAY_1_PIN, RELAY_2_PIN, RELAY_3_PIN, RELAY_4_PIN])
 relay_manager.set_logger(log)
 
+# MMA845X Accelerometer (via I2C1)
+mma845x_manager = None
+if ENABLE_MMA845X and MMA845X_AVAILABLE:
+    try:
+        # Use 100kHz for MMA845X (required for clock stretching)
+        i2c1 = machine.I2C(
+            MMA845X_I2C_ID,
+            scl=machine.Pin(MMA845X_I2C_SCL_PIN),
+            sda=machine.Pin(MMA845X_I2C_SDA_PIN),
+            freq=100000,
+        )
+        mma845x_manager = MMA845XManager(i2c1, MMA845X_I2C_ADDRESS, log)
+        log("MMA845X", "I2C1 and manager initialized")
+    except Exception as e:
+        log("MMA845X", f"Init failed: {e}")
+        mma845x_manager = None
+
 RELAY_COMMAND_TOPICS = [
     TOPIC_RELAY_1_COMMAND,
     TOPIC_RELAY_2_COMMAND,
@@ -272,6 +308,13 @@ _gps_available = False
 
 # Time sync state
 time_synced = False
+
+# MMA845X accelerometer state
+accel_roll_offset = 0.0
+accel_pitch_offset = 0.0
+accel_measure_enabled = True  # Start with measurement enabled
+accel_last_roll = 0.0
+accel_last_pitch = 0.0
 
 
 # -----------------------------------------------------------------------------
@@ -399,6 +442,27 @@ if ENABLE_ACS37030 and current_sensors:
             }
         )
 
+# Add MMA845X accelerometer sensors (roll and pitch only)
+if ENABLE_MMA845X and mma845x_manager:
+    SENSOR_REGISTRY.extend(
+        [
+            {
+                "name": "accel_roll",
+                "read_func": lambda: _read_mma845x_angle("roll"),
+                "state_topic": TOPIC_ACCEL_ROLL_STATE,
+                "sensor_manager": mma845x_manager,
+                "needs_unavailable": False,
+            },
+            {
+                "name": "accel_pitch",
+                "read_func": lambda: _read_mma845x_angle("pitch"),
+                "state_topic": TOPIC_ACCEL_PITCH_STATE,
+                "sensor_manager": mma845x_manager,
+                "needs_unavailable": False,
+            },
+        ]
+    )
+
 
 # -----------------------------------------------------------------------------
 # MQTT PUBLISH FUNCTIONS
@@ -418,6 +482,83 @@ def _read_current_with_offset(index: int) -> float | None:
         raw = current_sensors[index].read()
         if raw is not None:
             return round(raw, 2)
+    return None
+
+
+def _read_mma845x_axis(axis: str) -> float | None:
+    """Read MMA845X accelerometer axis value.
+
+    Args:
+        axis: Axis to read ('x', 'y', or 'z')
+
+    Returns:
+        Axis value in g, or None if not available
+    """
+    if mma845x_manager is None:
+        return None
+    data = mma845x_manager.read()
+    if data is None:
+        return None
+    return data.get(axis)
+
+
+def _read_mma845x_angle(angle_type: str) -> float | None:
+    """Read MMA845X accelerometer roll/pitch angle.
+
+    Args:
+        angle_type: 'roll' or 'pitch'
+
+    Returns:
+        Angle in degrees (calibrated), or None if not available/disabled
+    """
+    global accel_last_roll, accel_last_pitch
+
+    if mma845x_manager is None:
+        return None
+
+    # If measurement disabled, return last cached value
+    if not accel_measure_enabled:
+        return accel_last_roll if angle_type == "roll" else accel_last_pitch
+
+    # Get raw angle
+    raw_angle = _read_mma845x_angle_raw(angle_type == "pitch")
+    if raw_angle is None:
+        return None
+
+    # Apply calibration offset
+    if angle_type == "roll":
+        calibrated = raw_angle - accel_roll_offset
+        accel_last_roll = round(calibrated, 1)
+        return accel_last_roll
+    else:
+        calibrated = raw_angle - accel_pitch_offset
+        accel_last_pitch = round(calibrated, 1)
+        return accel_last_pitch
+
+
+def _read_mma845x_angle_raw(pitch: bool = False) -> float | None:
+    """Read raw MMA845X angle without calibration or measurement check.
+
+    Args:
+        pitch: True for pitch, False for roll
+    """
+    if mma845x_manager is None:
+        return None
+    data = mma845x_manager.read()
+    if data is None:
+        return None
+
+    x = data.get("x", 0)
+    y = data.get("y", 0)
+    z = data.get("z", 1)
+
+    try:
+        if pitch:
+            return round(math.degrees(math.atan2(x, z)), 1)
+        else:
+            return round(math.degrees(math.atan2(y, z)), 1)
+    except Exception:
+        return None
     return None
 
 
@@ -499,7 +640,14 @@ def update_version_received(latest: str) -> None:
 # -----------------------------------------------------------------------------
 def on_message(topic: bytes, msg: bytes) -> None:
     """Handle incoming MQTT messages."""
-    global led_state, update_state
+    global \
+        led_state, \
+        update_state, \
+        accel_roll_offset, \
+        accel_pitch_offset, \
+        accel_measure_enabled, \
+        accel_last_roll, \
+        accel_last_pitch
 
     try:
         topic_str = topic.decode()
@@ -595,6 +743,35 @@ def on_message(topic: bytes, msg: bytes) -> None:
                     update_version_received(latest)
             except Exception as e:
                 log("ERROR", f"Failed to parse latest version: {e}")
+
+        elif topic_str == TOPIC_ACCEL_CALIBRATE:
+            # Calibrate: set current angles as zero offset
+            if msg_str in ("PRESS", "ON", "CALIBRATE"):
+                current_roll = _read_mma845x_angle_raw()
+                current_pitch = _read_mma845x_angle_raw(True)
+                if current_roll is not None and current_pitch is not None:
+                    accel_roll_offset = current_roll
+                    accel_pitch_offset = current_pitch
+                    log(
+                        "ACCEL",
+                        f"Calibrated: roll_offset={current_roll}, pitch_offset={current_pitch}",
+                    )
+                    # Publish pressed state, then reset
+                    mqtt_publish(TOPIC_ACCEL_CALIBRATE_STATE, "pressed")
+                    time.sleep_ms(100)
+                    mqtt_publish(TOPIC_ACCEL_CALIBRATE_STATE, "")
+
+        elif topic_str == TOPIC_ACCEL_MEASURE_COMMAND:
+            # Toggle measurement on/off
+            if msg_str == "ON":
+                accel_measure_enabled = True
+                log("ACCEL", "Measurement enabled")
+            elif msg_str == "OFF":
+                accel_measure_enabled = False
+                log("ACCEL", "Measurement disabled")
+            mqtt_publish(
+                TOPIC_ACCEL_MEASURE_STATE, "ON" if accel_measure_enabled else "OFF"
+            )
 
     except Exception as e:
         log("ERROR", f"Message handling failed: {e}")
@@ -694,6 +871,8 @@ def connect_mqtt() -> bool:
         mqtt_client.subscribe(TOPIC_LED_COMMAND)
         mqtt_client.subscribe(TOPIC_UPDATE_CMD)
         mqtt_client.subscribe(TOPIC_UPDATE_LATEST)
+        mqtt_client.subscribe(TOPIC_ACCEL_CALIBRATE)
+        mqtt_client.subscribe(TOPIC_ACCEL_MEASURE_COMMAND)
         for topic in RELAY_COMMAND_TOPICS:
             mqtt_client.subscribe(topic)
         log("MQTT", "Subscribed!")
@@ -703,6 +882,11 @@ def connect_mqtt() -> bool:
         for i, topic in enumerate(RELAY_STATE_TOPICS):
             state = "ON" if relay_manager.get_relay(i) else "OFF"
             mqtt_publish(topic, state)
+        # Publish accelerometer measure state
+        mqtt_publish(
+            TOPIC_ACCEL_MEASURE_STATE, "ON" if accel_measure_enabled else "OFF"
+        )
+        mqtt_publish(TOPIC_ACCEL_CALIBRATE_STATE, "idle")
         # Initial version publish: read from flash and send to HA
         current_version = read_version() or "0.0"
         publish_version(current_version, current_version, False)

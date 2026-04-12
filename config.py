@@ -45,6 +45,16 @@ TOPIC_ROOM_TEMP_STATE = "homeassistant/pico/sensor/room_temp"
 
 TOPIC_WATER_TEMP_STATE = "homeassistant/pico/sensor/water_temp"
 
+# MMA845X Accelerometer Topics
+TOPIC_ACCEL_ROLL_STATE = "homeassistant/pico/sensor/accel_roll"
+TOPIC_ACCEL_PITCH_STATE = "homeassistant/pico/sensor/accel_pitch"
+
+# MMA845X Calibration & Measure Control Topics
+TOPIC_ACCEL_CALIBRATE = "homeassistant/pico/button/accel_calibrate/set"
+TOPIC_ACCEL_CALIBRATE_STATE = "homeassistant/pico/button/accel_calibrate/state"
+TOPIC_ACCEL_MEASURE_COMMAND = "homeassistant/pico/switch/accel_measure/set"
+TOPIC_ACCEL_MEASURE_STATE = "homeassistant/pico/switch/accel_measure/state"
+
 # ACS37030 Current Sensors (5 sensors)
 TOPIC_CURRENT_1_STATE = "homeassistant/pico/sensor/current_1"
 TOPIC_CURRENT_2_STATE = "homeassistant/pico/sensor/current_2"
@@ -80,9 +90,14 @@ ACS37030_ZERO_OFFSET = (
 ACS37030_NUM_SENSORS = 5  # Number of ACS37030 sensors (max 5)
 ACS37030_PICO_ADC_PIN = 26  # GP26 for 5th sensor (ADC0)
 ENABLE_ACS37030_PICO_ADC = True  # Set to True when 5th sensor is physically connected
-ACS37030_BUFFER_SIZE = (
-    10  # Moving average buffer size (higher = smoother but slower response)
-)
+ACS37030_BUFFER_SIZE = 10
+
+# MMA845X Accelerometer Configuration (via I2C1)
+ENABLE_MMA845X = True
+MMA845X_I2C_ID = 1
+MMA845X_I2C_SDA_PIN = 10
+MMA845X_I2C_SCL_PIN = 11
+MMA845X_I2C_ADDRESS = 0x1D
 
 # Timing
 SENSOR_UPDATE_INTERVAL_MS = 1000  # Reduced frequency for LTE (was 1000)

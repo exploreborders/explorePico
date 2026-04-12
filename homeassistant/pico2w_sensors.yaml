@@ -11,6 +11,9 @@
 #   - Room Temperature
 #   - Water Temperature
 #   - Current 1-5
+#   - Accelerometer Roll & Pitch (angle in degrees)
+#   - Accelerometer Calibrate Button
+#   - Accelerometer Measure Switch
 #   - LED Switch
 #   - Relay 1-4 Switches
 #
@@ -210,6 +213,34 @@ mqtt:
           - pico2w
         name: "Raspberry Pi Pico 2W"
 
+    # Accelerometer Roll
+    - name: "Pico Accel Roll"
+      unique_id: "pico_accel_roll"
+      state_topic: "homeassistant/pico/sensor/accel_roll"
+      unit_of_measurement: "°"
+      availability:
+        topic: "homeassistant/pico/availability"
+        payload_available: "online"
+        payload_not_available: "offline"
+      device:
+        identifiers:
+          - pico2w
+        name: "Raspberry Pi Pico 2W"
+
+    # Accelerometer Pitch
+    - name: "Pico Accel Pitch"
+      unique_id: "pico_accel_pitch"
+      state_topic: "homeassistant/pico/sensor/accel_pitch"
+      unit_of_measurement: "°"
+      availability:
+        topic: "homeassistant/pico/availability"
+        payload_available: "online"
+        payload_not_available: "offline"
+      device:
+        identifiers:
+          - pico2w
+        name: "Raspberry Pi Pico 2W"
+
     # GPS Latitude
     - name: "Pico GPS Latitude"
       unique_id: "pico_gps_latitude"
@@ -272,7 +303,55 @@ mqtt:
           - pico2w
         name: "Raspberry Pi Pico 2W"
 
+  button:
+    # Accelerometer Calibrate
+    - name: "Pico Accel Calibrate"
+      unique_id: "pico_accel_calibrate"
+      command_topic: "homeassistant/pico/button/accel_calibrate/set"
+      payload_press: "PRESS"
+      availability:
+        topic: "homeassistant/pico/availability"
+        payload_available: "online"
+        payload_not_available: "offline"
+      device:
+        identifiers:
+          - pico2w
+        name: "Raspberry Pi Pico 2W"
+
   switch:
+    # Accelerometer Calibrate
+    - name: "Pico Accel Calibrate"
+      unique_id: "pico_accel_calibrate"
+      command_topic: "homeassistant/pico/switch/accel_calibrate/set"
+      state_topic: "homeassistant/pico/switch/accel_calibrate/state"
+      payload_on: "ON"
+      payload_off: "OFF"
+      availability:
+        topic: "homeassistant/pico/availability"
+        payload_available: "online"
+        payload_not_available: "offline"
+      device:
+        identifiers:
+          - pico2w
+        name: "Raspberry Pi Pico 2W"
+
+    # Accelerometer Measure Toggle
+    # Accelerometer Measure Toggle
+    - name: "Pico Accel Measure"
+      unique_id: "pico_accel_measure"
+      command_topic: "homeassistant/pico/switch/accel_measure/set"
+      state_topic: "homeassistant/pico/switch/accel_measure/state"
+      payload_on: "ON"
+      payload_off: "OFF"
+      availability:
+        topic: "homeassistant/pico/availability"
+        payload_available: "online"
+        payload_not_available: "offline"
+      device:
+        identifiers:
+          - pico2w
+        name: "Raspberry Pi Pico 2W"
+
     # LED Switch
     - name: "Pico LED"
       unique_id: "pico_led"
