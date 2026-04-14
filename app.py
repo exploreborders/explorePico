@@ -1219,7 +1219,7 @@ def main() -> None:
                 log("MQTT", f"Reconnect in {delay}s (attempt {reconnect_count})")
                 time.sleep(delay)
                 if reconnect_count > 5:
-                    reconnect_count = 0
+                    reconnect_count = 1  # Reset to 1, not 0 (prevents instant retry)
                 continue
             reconnect_count = 0
 
