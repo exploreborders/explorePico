@@ -32,6 +32,8 @@ _lte_manager: SIM7600Manager | None = None
 _log_fn = None
 _time_synced = False
 _time_sync_source = None
+_reconnect_attempts = 0
+MAX_RECONNECT_ATTEMPTS = 3
 
 
 def set_logger(log_fn) -> None:
@@ -128,6 +130,10 @@ def connect_lte(
         True if connected successfully
     """
     global _lte_manager
+
+    # Reset reconnect counter on new connection attempt
+    global _reconnect_attempts
+    _reconnect_attempts = 0
 
     # Reuse existing SIM7600 if already initialized (e.g., via init_gps)
     if _lte_manager and _lte_manager.sim:
@@ -408,17 +414,26 @@ def reconnect_if_needed() -> bool:
 
     Uses a lightweight reconnect that doesn't restart the modem.
     Only reopens the network service and PDP context.
+    Has a maximum retry limit to prevent infinite loops.
 
     Returns:
         True if connected or reconnected
     """
-    global _lte_manager
+    global _lte_manager, _reconnect_attempts
 
     if is_lte_connected():
+        _reconnect_attempts = 0  # Reset on successful connection
         return True
+
+    if _reconnect_attempts >= MAX_RECONNECT_ATTEMPTS:
+        _log("LTE", f"Max reconnect attempts ({MAX_RECONNECT_ATTEMPTS}) reached")
+        return False
 
     if not _lte_manager or not _lte_manager.sim:
         return False
+
+    _reconnect_attempts += 1
+    _log("LTE", f"Reconnect attempt {_reconnect_attempts}/{MAX_RECONNECT_ATTEMPTS}")
 
     sim = _lte_manager.sim
 
@@ -449,6 +464,7 @@ def reconnect_if_needed() -> bool:
     if ip:
         _log("LTE", f"Reconnected with IP: {ip}")
         sim.lte_connected = True
+        _reconnect_attempts = 0  # Reset on success
         return True
 
     _log("LTE", "Reconnection failed - no IP")

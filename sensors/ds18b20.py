@@ -93,7 +93,8 @@ class DS18B20:
             self._conversion_started = True
             self._conversion_start_time = time.ticks_ms()
             return True
-        except Exception:
+        except Exception as e:
+            self._log(f"Conversion error: {e}")
             return False
 
     def read(self, start_conversion: bool = True) -> list[float | None]:
@@ -114,7 +115,8 @@ class DS18B20:
             self._conversion_started = False
             return self.last_values
 
-        except Exception:
+        except Exception as e:
+            self._log(f"Read error: {e}")
             self._conversion_started = False
             return self.last_values
 

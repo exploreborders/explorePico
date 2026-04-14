@@ -37,8 +37,11 @@ def get_wlan():
 
 def is_connected() -> bool:
     """Check if WiFi is connected."""
-    wlan = get_wlan()
-    return wlan.isconnected()
+    try:
+        wlan = get_wlan()
+        return wlan.isconnected()
+    except OSError:
+        return False
 
 
 def scan_and_connect(
@@ -71,7 +74,14 @@ def scan_and_connect(
 
     # Retry scan — CYW43 radio can take a few seconds to be ready
     scan_results = []
+    scan_start = time.ticks_ms()
+    scan_timeout_ms = 10000  # 10 seconds max for scanning
+
     for _ in range(3):
+        if time.ticks_diff(time.ticks_ms(), scan_start) > scan_timeout_ms:
+            if log_fn:
+                log_fn("WiFi", "Scan timeout reached")
+            break
         time.sleep(1)
         scan_results = wlan.scan()
         if scan_results:
