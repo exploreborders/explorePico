@@ -27,7 +27,6 @@ class RelayManager:
 
         self._pins[index].value(1 if state else 0)
         self._states[index] = state
-        self._log("RELAY", f"Relay {index + 1}: {'ON' if state else 'OFF'}")
 
     def get_relay(self, index: int) -> bool:
         if index < 0 or index >= len(self._pins):
