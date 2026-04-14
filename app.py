@@ -111,7 +111,6 @@ from config import (
     ACS37030_ZERO_OFFSET,
     ACS37030_NUM_SENSORS,
     ACS37030_PICO_ADC_PIN,
-    ACS37030_BUFFER_SIZE,
     ENABLE_MMA845X,
     MMA845X_I2C_ID,
     MMA845X_I2C_SDA_PIN,
@@ -223,7 +222,6 @@ if ENABLE_ACS37030:
                     sensor,
                     f"ACS37030_{i + 1}",
                     SENSOR_RETRY_INTERVAL_MS,
-                    ACS37030_BUFFER_SIZE,
                 )
                 manager.set_logger(log)
                 current_sensors.append(manager)
@@ -244,9 +242,7 @@ if ENABLE_ACS37030:
             zero_point=ACS37030_ZERO_POINT,
             is_pico_adc=True,
         )
-        manager = ACS37030Manager(
-            sensor, "ACS37030_5", SENSOR_RETRY_INTERVAL_MS, ACS37030_BUFFER_SIZE
-        )
+        manager = ACS37030Manager(sensor, "ACS37030_5", SENSOR_RETRY_INTERVAL_MS)
         manager.set_logger(log)
         current_sensors.append(manager)
     elif ACS37030_NUM_SENSORS >= 5 and not ENABLE_ACS37030_PICO_ADC:

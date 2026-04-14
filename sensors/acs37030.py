@@ -51,6 +51,7 @@ Notes:
 """
 
 import time
+from config import MMA845X_EMA_ALPHA
 
 
 class ACS37030:
@@ -129,14 +130,13 @@ class ACS37030:
 
 
 class ACS37030Manager:
-    """Manages ACS37030 sensors with retry logic and filtering."""
+    """Manages ACS37030 sensors with retry logic and EMA filtering."""
 
     def __init__(
         self,
         sensor: ACS37030,
         name: str = "ACS37030",
         retry_interval_ms: int = 60000,
-        buffer_size: int = 10,
     ) -> None:
         """Initialize sensor manager.
 
@@ -144,7 +144,6 @@ class ACS37030Manager:
             sensor: ACS37030 instance
             name: Sensor name for logging
             retry_interval_ms: Retry interval for failed init
-            buffer_size: Size of moving average buffer (higher = smoother)
         """
         self.sensor = sensor
         self.name = name
@@ -155,8 +154,7 @@ class ACS37030Manager:
         self._initialized = False
         self._ever_connected = False
 
-        self._raw_buffer = []
-        self._buffer_size = buffer_size  # Buffer is limited to buffer_size
+        self.ema_value = None  # EMA-filtered value (replaces buffer)
 
     def set_logger(self, logger) -> None:
         """Set logging function.
@@ -184,7 +182,10 @@ class ACS37030Manager:
         if self._initialized:
             return True
 
-        if self._last_init != 0 and time.ticks_diff(now, self._last_init) < self.retry_interval_ms:
+        if (
+            self._last_init != 0
+            and time.ticks_diff(now, self._last_init) < self.retry_interval_ms
+        ):
             return False
 
         self._last_init = now
@@ -199,7 +200,7 @@ class ACS37030Manager:
         return False
 
     def read(self) -> float | None:
-        """Read current value with moving average filter.
+        """Read current value with EMA filter.
 
         Returns:
             Filtered current in Amps, or None if not initialized
@@ -212,13 +213,15 @@ class ACS37030Manager:
         if raw_value is None:
             return self.sensor.last_value
 
-        self._raw_buffer.append(raw_value)
+        # EMA calculation (same algorithm as MMA845X)
+        if self.ema_value is None:
+            self.ema_value = raw_value
+        else:
+            self.ema_value = (
+                MMA845X_EMA_ALPHA * raw_value + (1 - MMA845X_EMA_ALPHA) * self.ema_value
+            )
 
-        if len(self._raw_buffer) > self._buffer_size:
-            self._raw_buffer.pop(0)
-
-        filtered = sum(self._raw_buffer) / len(self._raw_buffer)
-        return round(filtered, 2)
+        return round(self.ema_value, 2)
 
     @property
     def ever_connected(self) -> bool:
