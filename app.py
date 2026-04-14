@@ -604,8 +604,8 @@ def publish_version(
         return
     try:
         mqtt_client.publish(TOPIC_UPDATE_STATE, ujson.dumps(state), retain=True)
-    except OSError:
-        pass
+    except OSError as e:
+        log("MQTT", f"Publish version state failed: {e}")
 
 
 def update_version_received(latest: str) -> None:
@@ -1067,13 +1067,20 @@ def run_main_loop() -> None:
 
         time.sleep(MQTT_LOOP_DELAY)
 
-    except OSError as e:
-        log("WARN", f"Connection lost: {e}")
+    except (OSError, ConnectionError, EOFError) as e:
+        # Network/connection issues - recoverable
+        log("WARN", f"Connection error: {e}")
         blink_pattern("111")
         disconnect_mqtt()
         # OSError(-1) = broker closed connection (peer reset). Wait longer to
         # let the broker expire the old session before reconnecting.
         time.sleep(15.0 if e.args[0] == -1 else ERROR_DELAY_LONG)
+
+    except ValueError as e:
+        # Data parsing errors - may be recoverable
+        log("WARN", f"Data parsing error: {e}")
+        blink_pattern("1001")
+        time.sleep(ERROR_DELAY_SHORT)
 
     except Exception as e:
         err_str = str(e)
@@ -1089,6 +1096,7 @@ def run_main_loop() -> None:
             disconnect_mqtt()
             time.sleep(ERROR_DELAY_LONG)
         else:
+            # Unknown errors - needs investigation
             log("ERROR", f"Unexpected error: {e}")
             blink_pattern("111")
             time.sleep(ERROR_DELAY_SHORT)

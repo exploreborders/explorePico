@@ -111,6 +111,9 @@ class ACS37030:
         if voltage is None:
             return None
 
+        if not self.sensitivity or self.sensitivity == 0:
+            return None
+
         adjusted_zero = self.zero_point + self.zero_point_offset
         current = (voltage - adjusted_zero) / self.sensitivity
 
