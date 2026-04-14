@@ -39,7 +39,6 @@ Environment:
 # IMPORTS
 # -----------------------------------------------------------------------------
 import time
-import math
 from umqtt.simple import MQTTClient
 import machine
 import ujson
@@ -118,6 +117,7 @@ from config import (
     MMA845X_I2C_SDA_PIN,
     MMA845X_I2C_SCL_PIN,
     MMA845X_I2C_ADDRESS,
+    MMA845X_UPDATE_INTERVAL_MS,
     TOPIC_ACCEL_ROLL_STATE,
     TOPIC_ACCEL_PITCH_STATE,
     TOPIC_ACCEL_CALIBRATE,
@@ -315,6 +315,7 @@ accel_pitch_offset = 0.0
 accel_measure_enabled = True  # Start with measurement enabled
 accel_last_roll = 0.0
 accel_last_pitch = 0.0
+last_mma845x_read = 0
 
 
 # -----------------------------------------------------------------------------
@@ -537,29 +538,15 @@ def _read_mma845x_angle(angle_type: str) -> float | None:
 
 
 def _read_mma845x_angle_raw(pitch: bool = False) -> float | None:
-    """Read raw MMA845X angle without calibration or measurement check.
+    """Read raw MMA845X angle with EMA filtering at 10Hz.
 
     Args:
         pitch: True for pitch, False for roll
     """
     if mma845x_manager is None:
         return None
-    data = mma845x_manager.read()
-    if data is None:
-        return None
 
-    x = data.get("x", 0)
-    y = data.get("y", 0)
-    z = data.get("z", 1)
-
-    try:
-        if pitch:
-            return round(math.degrees(math.atan2(x, z)), 1)
-        else:
-            return round(math.degrees(math.atan2(y, z)), 1)
-    except Exception:
-        return None
-    return None
+    return mma845x_manager.read_filtered_ema(pitch)
 
 
 def publish_all_sensors() -> None:
@@ -944,6 +931,17 @@ def handle_sensor_publish() -> None:
         last_sensor_publish = now
 
 
+def handle_mma845x_read() -> None:
+    """Read MMA845X at 10Hz for EMA filtering."""
+    global last_mma845x_read
+
+    now = time.ticks_ms()
+    if time.ticks_diff(now, last_mma845x_read) >= MMA845X_UPDATE_INTERVAL_MS:
+        _read_mma845x_angle_raw(pitch=False)
+        _read_mma845x_angle_raw(pitch=True)
+        last_mma845x_read = now
+
+
 def handle_connection_type_publish() -> None:
     """Publish connection type (LTE/WiFi/offline)."""
     global connection_type, last_connection_type_publish
@@ -1056,6 +1054,9 @@ def run_main_loop() -> None:
     try:
         # Check for incoming messages first (highest priority)
         handle_mqtt_message()
+
+        # Read MMA845X at 10Hz for EMA filtering
+        handle_mma845x_read()
 
         # Send all outgoing data without intermediate message checks
         # The SIM7600 buffers incoming data, nothing is lost

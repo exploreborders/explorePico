@@ -1,4 +1,6 @@
 from updater_utils import log
+import math
+from config import MMA845X_EMA_ALPHA
 
 
 class MMA845X:
@@ -63,6 +65,8 @@ class MMA845XManager:
         self.log = logger_func
         self.driver = MMA845X(i2c, address)
         self.initialized = False
+        self.ema_roll = None
+        self.ema_pitch = None
 
     def initialize(self):
         """Initialize the hardware."""
@@ -82,3 +86,42 @@ class MMA845XManager:
         if axes is None:
             return None
         return {"x": axes[0], "y": axes[1], "z": axes[2]}
+
+    def read_filtered_ema(self, pitch: bool = False) -> float | None:
+        """Read angle with EMA filtering."""
+        if not self.initialized:
+            if not self.initialize():
+                return None
+
+        axes = self.driver.read_axes()
+        if axes is None:
+            return None
+
+        x, y, z = axes
+
+        try:
+            if pitch:
+                raw_angle = math.degrees(math.atan2(x, z))
+            else:
+                raw_angle = math.degrees(math.atan2(y, z))
+        except Exception:
+            return None
+
+        if pitch:
+            if self.ema_pitch is None:
+                self.ema_pitch = raw_angle
+            else:
+                self.ema_pitch = (
+                    MMA845X_EMA_ALPHA * raw_angle
+                    + (1 - MMA845X_EMA_ALPHA) * self.ema_pitch
+                )
+            return round(self.ema_pitch, 1)
+        else:
+            if self.ema_roll is None:
+                self.ema_roll = raw_angle
+            else:
+                self.ema_roll = (
+                    MMA845X_EMA_ALPHA * raw_angle
+                    + (1 - MMA845X_EMA_ALPHA) * self.ema_roll
+                )
+            return round(self.ema_roll, 1)

@@ -99,6 +99,10 @@ MMA845X_I2C_SDA_PIN = 10
 MMA845X_I2C_SCL_PIN = 11
 MMA845X_I2C_ADDRESS = 0x1D
 
+# MMA845X Filter Configuration
+MMA845X_EMA_ALPHA = 0.2  # Glättungsfaktor (0,1=stark, 0,2=mittel, 0,5=schnell)
+MMA845X_UPDATE_INTERVAL_MS = 100  # Interne Messrate: 10Hz
+
 # Timing
 SENSOR_UPDATE_INTERVAL_MS = 1000  # Reduced frequency for LTE (was 1000)
 RECONNECT_DELAY_S = 5
