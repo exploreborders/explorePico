@@ -134,6 +134,8 @@ from config import (
     MQTT_LOOP_DELAY,
     ERROR_DELAY_SHORT,
     ERROR_DELAY_LONG,
+    WDT_ENABLED,
+    WDT_TIMEOUT_MS,
     validate_config,
     TOPIC_LED_COMMAND,
     TOPIC_LED_STATE,
@@ -187,6 +189,9 @@ micropython.alloc_emergency_exception_buf(200)
 
 uid = ubinascii.hexlify(machine.unique_id()).decode()
 MQTT_CLIENT_ID = f"pico_{uid}"
+
+# Watchdog timer reference (initialized in main())
+wdt = None
 
 # Sensor objects
 temp_sensor = machine.ADC(INTERNAL_TEMP_ADC_PIN)
@@ -825,6 +830,10 @@ def connect_mqtt() -> bool:
     log("MQTT", "Connecting...")
     blink_pattern("10")
 
+    # Feed watchdog before and after connection (can take > 8 seconds)
+    if wdt:
+        wdt.feed()
+
     try:
         mqtt_client = create_mqtt_client()
 
@@ -873,6 +882,11 @@ def connect_mqtt() -> bool:
         # Initial version publish: read from flash and send to HA
         current_version = read_version() or "0.0"
         publish_version(current_version, current_version, False)
+
+        # Feed watchdog before sensor publish (can take several seconds)
+        if wdt:
+            wdt.feed()
+
         publish_all_sensors()
 
         # Small delay to ensure all initial states are sent before main loop
@@ -1047,6 +1061,10 @@ def run_main_loop() -> None:
     """
     global mqtt_client
 
+    # Feed watchdog at start of each iteration - if we hang, system resets
+    if wdt:
+        wdt.feed()
+
     try:
         # Check for incoming messages first (highest priority)
         handle_mqtt_message()
@@ -1145,6 +1163,11 @@ def main() -> None:
 
     blink_pattern("11011")
 
+    global wdt
+    if WDT_ENABLED:
+        wdt = machine.WDT(timeout=WDT_TIMEOUT_MS)
+        log("WDT", f"Watchdog enabled ({WDT_TIMEOUT_MS}ms)")
+
     disconnect_mqtt()
 
     # Time sync state
@@ -1154,6 +1177,10 @@ def main() -> None:
     TIME_SYNC_RETRY_INTERVAL_MS = 300000  # Retry every 5 minutes
 
     while True:
+        # Feed watchdog before any long operations that might exceed timeout
+        if wdt:
+            wdt.feed()
+
         # Check LTE first, only use WiFi as fallback
         if LTE_AVAILABLE and is_lte_connected():
             # Try to sync time if not yet synced or retry interval passed

@@ -117,6 +117,10 @@ MQTT_LOOP_DELAY = 0.05  # Main loop iteration delay (20 checks/sec)
 ERROR_DELAY_SHORT = 1.0  # After minor error
 ERROR_DELAY_LONG = 3.0  # After serious error/connection lost
 
+# Watchdog Timer (for 24/7 unattended operation)
+WDT_ENABLED = True  # Enable hardware watchdog timer
+WDT_TIMEOUT_MS = 8000  # 8 seconds (RP2350 max is ~8388ms)
+
 # GitHub WiFi Updater Configuration
 GITHUB_OWNER = "exploreborders"
 GITHUB_REPO = "explorePico"
