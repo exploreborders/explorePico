@@ -690,8 +690,19 @@ def on_message(topic: bytes, msg: bytes) -> None:
 
                 # Start update process
                 try:
+                    # Force garbage collection before update to free memory
+                    import gc
+
+                    gc.collect()
+
+                    # Clear MQTT pending messages to free memory
+                    if mqtt_client and hasattr(mqtt_client, "_pending_messages"):
+                        mqtt_client._pending_messages.clear()
+
+                    log("MEMORY", "Cleared buffers before update")
+
                     success = check_and_update(
-                        GITHUB_OWNER, GITHUB_REPO, progress_callback
+                        GITHUB_OWNER, GITHUB_REPO, progress_callback, wdt
                     )
                 except Exception as e:
                     log("UPDATE", f"Update error: {e}")
@@ -714,10 +725,16 @@ def on_message(topic: bytes, msg: bytes) -> None:
                     latest = latest_version_received or current
                     if update_state == "up_to_date":
                         publish_version(current, latest, False, 100)
+                        # Feed watchdog before 5s sleep
+                        if wdt:
+                            wdt.feed()
                         time.sleep(5)
                         publish_version(current, latest, False)
                     else:
                         publish_version(current, latest, False, 0)
+                        # Feed watchdog before 5s sleep
+                        if wdt:
+                            wdt.feed()
                         time.sleep(5)
                         publish_version(current, latest, False)
                     update_state = "Update Pico"
@@ -1091,6 +1108,9 @@ def run_main_loop() -> None:
         log("WARN", f"Connection error: {e}")
         blink_pattern("111")
         disconnect_mqtt()
+        # Feed watchdog before long sleep to prevent WDT reset
+        if wdt:
+            wdt.feed()
         # OSError(-1) = broker closed connection (peer reset). Wait longer to
         # let the broker expire the old session before reconnecting.
         time.sleep(15.0 if e.args[0] == -1 else ERROR_DELAY_LONG)
@@ -1099,6 +1119,9 @@ def run_main_loop() -> None:
         # Data parsing errors - may be recoverable
         log("WARN", f"Data parsing error: {e}")
         blink_pattern("1001")
+        # Feed watchdog before short sleep
+        if wdt:
+            wdt.feed()
         time.sleep(ERROR_DELAY_SHORT)
 
     except Exception as e:
@@ -1113,11 +1136,17 @@ def run_main_loop() -> None:
             log("WARN", f"SSL/Connection error: {e}")
             blink_pattern("111")
             disconnect_mqtt()
+            # Feed watchdog before long sleep
+            if wdt:
+                wdt.feed()
             time.sleep(ERROR_DELAY_LONG)
         else:
             # Unknown errors - needs investigation
             log("ERROR", f"Unexpected error: {e}")
             blink_pattern("111")
+            # Feed watchdog before short sleep
+            if wdt:
+                wdt.feed()
             time.sleep(ERROR_DELAY_SHORT)
 
 

@@ -85,7 +85,9 @@ def get_raw_url(owner: str, repo: str, path: str, ref: str) -> str:
     return f"https://raw.githubusercontent.com/{owner}/{repo}/{ref}/{path}"
 
 
-def get_all_files(owner: str, repo: str, ref: str, seen: set = None, path: str = "") -> list:
+def get_all_files(
+    owner: str, repo: str, ref: str, seen: set = None, path: str = ""
+) -> list:
     """Recursively get all .py and version.txt files from repository."""
     if seen is None:
         seen = set()
@@ -105,7 +107,9 @@ def get_all_files(owner: str, repo: str, ref: str, seen: set = None, path: str =
             if item_path in seen:
                 continue
             seen.add(item_path)
-            files.append({"path": item_path, "raw_url": get_raw_url(owner, repo, item_path, ref)})
+            files.append(
+                {"path": item_path, "raw_url": get_raw_url(owner, repo, item_path, ref)}
+            )
         elif item_type == "dir" and name not in [".git", ".vscode", "__pycache__"]:
             dir_path = f"{path}/{name}" if path else name
             sub_files = get_all_files(owner, repo, ref, seen, dir_path)
@@ -156,6 +160,7 @@ def download_and_update(
     repo: str,
     release_info: dict,
     progress_callback=None,
+    wdt=None,
 ) -> bool:
     """Download files from GitHub repository and update.
 
@@ -164,6 +169,7 @@ def download_and_update(
         repo: GitHub repository name
         release_info: Dict with 'tag' and 'files' keys
         progress_callback: Optional callback(percent: int, status: str) -> None
+        wdt: Optional watchdog timer to feed during long operations
     """
     log("Downloading files...")
 
@@ -173,6 +179,10 @@ def download_and_update(
     log(f"Updating {len(files)} files")
 
     for idx, file_info in enumerate(files):
+        # Feed watchdog during file download loop
+        if wdt:
+            wdt.feed()
+
         filename = file_info.get("path", "")
         raw_url = file_info.get("raw_url", "")
 
@@ -212,18 +222,28 @@ def download_and_update(
     return True
 
 
-def check_and_update(owner: str, repo: str, progress_callback=None) -> bool:
+def check_and_update(owner: str, repo: str, progress_callback=None, wdt=None) -> bool:
     """Check for updates from GitHub and apply if available.
 
     Args:
         owner: GitHub repository owner
         repo: GitHub repository name
         progress_callback: Optional callback(percent: int, status: str) -> None
+        wdt: Optional watchdog timer to feed during long operations
 
     Returns:
         True if update was applied and device will reboot
     """
+    # Force garbage collection to free memory before update
+    import gc
+
+    gc.collect()
+
     from wifi_utils import is_connected
+
+    # Feed watchdog before starting
+    if wdt:
+        wdt.feed()
 
     if not is_connected() and not (is_lte_connected and is_lte_connected()):
         log("No network connection (WiFi/LTE)")
@@ -233,6 +253,10 @@ def check_and_update(owner: str, repo: str, progress_callback=None) -> bool:
 
     log("Checking GitHub for updates...")
 
+    # Feed watchdog during API call
+    if wdt:
+        wdt.feed()
+
     new_version = get_latest_release_tag(owner, repo)
     if not new_version:
         log("No release found or API error")
@@ -241,6 +265,10 @@ def check_and_update(owner: str, repo: str, progress_callback=None) -> bool:
         return False
 
     log(f"Latest release: {new_version}")
+
+    # Feed watchdog before version comparison
+    if wdt:
+        wdt.feed()
 
     current = read_version() or "0.0"
     log(f"Current: {current}, Latest: {new_version}")
@@ -255,6 +283,10 @@ def check_and_update(owner: str, repo: str, progress_callback=None) -> bool:
 
     log(f"Update available: {new_version}")
 
+    # Feed watchdog before downloading release info
+    if wdt:
+        wdt.feed()
+
     release = get_latest_release(owner, repo)
     if not release:
         log("Failed to get release info")
@@ -262,7 +294,7 @@ def check_and_update(owner: str, repo: str, progress_callback=None) -> bool:
             progress_callback(0, "error")
         return False
 
-    if download_and_update(owner, repo, release, progress_callback):
+    if download_and_update(owner, repo, release, progress_callback, wdt):
         return True
 
     return False
