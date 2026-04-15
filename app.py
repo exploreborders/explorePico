@@ -1085,8 +1085,9 @@ def run_main_loop() -> None:
 
         time.sleep(MQTT_LOOP_DELAY)
 
-    except (OSError, ConnectionError, EOFError) as e:
+    except (OSError, EOFError) as e:
         # Network/connection issues - recoverable
+        # Note: ConnectionError not available in MicroPython, use OSError
         log("WARN", f"Connection error: {e}")
         blink_pattern("111")
         disconnect_mqtt()
@@ -1249,6 +1250,11 @@ def main() -> None:
                     reconnect_count = 1  # Reset to 1, not 0 (prevents instant retry)
                 continue
             reconnect_count = 0
+
+        # Small delay and WDT feed before entering main loop
+        if wdt:
+            wdt.feed()
+        time.sleep(0.5)
 
         run_main_loop()
 

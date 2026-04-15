@@ -275,7 +275,9 @@ class SIM7600MQTT:
             if data_start + expected_length <= len(data):
                 mqtt_data = data[data_start : data_start + expected_length]
                 if mqtt_data:
-                    self._log(f"Received +IPD ({expected_length} bytes)")
+                    # Only log substantial messages, not every PINGRESP
+                    if expected_length > 10:
+                        self._log(f"Received +IPD ({expected_length} bytes)")
                     self._got_response = True
                     if len(self._pending_messages) >= self._pending_messages_max:
                         self._pending_messages.pop(0)
@@ -313,9 +315,18 @@ class SIM7600MQTT:
         # Register incoming data handler so +IPD is captured during AT commands
         self.sim._incoming_handler = self._extract_incoming
 
-        # Close any existing connection
-        self._send_at("AT+CIPCLOSE=0", timeout=3000)
-        time.sleep(0.1)
+        # Only fully close/reopen network on reconnection (not first connect)
+        # This prevents timing issues on initial connection
+        if self.connected:
+            self._log("Reconnecting - fully closing TCP session...")
+            # Fully close any existing connection (CIPCLOSE + NETCLOSE)
+            self._send_at("AT+CIPCLOSE=0", timeout=3000)
+            time.sleep(0.2)
+            self._send_at("AT+NETCLOSE", timeout=5000)  # Fully close network service
+            time.sleep(0.5)  # Wait for SIM7600 to clean up
+            # Reopen network service after NETCLOSE (required before new TCP connection)
+            self._send_at("AT+NETOPEN", timeout=5000)
+            time.sleep(1)  # Wait for network service to open
 
         # Set CIPSENDMODE to 0 (don't wait for TCP ACK)
         self._send_at("AT+CIPSENDMODE=0", timeout=3000)
@@ -538,11 +549,13 @@ class SIM7600MQTT:
 
                     raise OSError("PINGRESP timeout - broker disconnected")
             else:
-                # Send new ping
-                self._send_data(_build_pingreq(), timeout=3000)
-                self._last_ping = now
-                self._got_response = False
-                self._log("PING sent, waiting for response...")
+                # Send new ping (only log on error - reduce verbose logging)
+                try:
+                    self._send_data(_build_pingreq(), timeout=3000)
+                    self._last_ping = now
+                    self._got_response = False
+                except Exception as e:
+                    self._log(f"PING failed: {e}")
 
     def _parse_and_callback(self, data: bytes) -> None:
         """Parse MQTT packets and call callback for each PUBLISH.
@@ -559,10 +572,12 @@ class SIM7600MQTT:
             2: "CONNACK",
             3: "PUBLISH",
             9: "SUBACK",
-            13: "PINGRESP",
+            13: "PINGRESP",  # Don't log - happens every 30s
         }
         name = packet_names.get(packet_type, f"UNKNOWN({packet_type})")
-        self._log(f"Packet: {name} ({len(data)} bytes)")
+        # Only log important packets, skip PINGRESP to reduce verbosity
+        if packet_type not in (13,):  # Skip PINGRESP
+            self._log(f"Packet: {name} ({len(data)} bytes)")
 
         # Scan for all packets in buffer
         i = 0
@@ -573,8 +588,7 @@ class SIM7600MQTT:
             if packet_type != MQTT_PUBLISH:
                 # For PINGRESP, set _got_response to indicate broker is alive
                 if packet_type == MQTT_PINGRESP:
-                    self._got_response = True
-                    self._log("PINGRESP received")
+                    self._got_response = True  # Silent - don't log every PINGRESP
                 # Advance past entire packet (parse remaining_length)
                 # MQTT varint is at most 4 bytes — cap loop to avoid infinite scan on malformed data
                 pos = i + 1
@@ -647,7 +661,7 @@ class SIM7600MQTT:
                 i += 1
 
     def disconnect(self) -> None:
-        """Disconnect from broker."""
+        """Disconnect from broker - properly close TCP session."""
         if self.connected:
             try:
                 self._send_data(_build_disconnect(), timeout=3000)
@@ -657,6 +671,14 @@ class SIM7600MQTT:
                 self._send_at("AT+CIPCLOSE=0", timeout=3000)
             except Exception:
                 pass
+            # Fully close network service to prevent stale connections
+            try:
+                self._send_at("AT+NETCLOSE", timeout=5000)
+            except Exception:
+                pass
+            import time
+
+            time.sleep(1)  # Wait for SIM7600 to clean up
             self.connected = False
             self._log("Disconnected")
         # Clear pending messages from old connection
