@@ -1193,10 +1193,9 @@ def main() -> None:
 
     blink_pattern("11011")
 
+    # WDT initialized after GPS (to allow setup time without WDT reset)
     global wdt
-    if WDT_ENABLED:
-        wdt = machine.WDT(timeout=WDT_TIMEOUT_MS)
-        log("WDT", f"Watchdog enabled ({WDT_TIMEOUT_MS}ms)")
+    wdt = None
 
     disconnect_mqtt()
 
@@ -1268,6 +1267,11 @@ def main() -> None:
                     _gps_available = True
             except Exception as e:
                 log("GPS", f"Init failed: {e}")
+
+        # Initialize WDT after GPS (protects MQTT connection)
+        if WDT_ENABLED and wdt is None:
+            wdt = machine.WDT(timeout=WDT_TIMEOUT_MS)
+            log("WDT", f"Watchdog enabled ({WDT_TIMEOUT_MS}ms)")
 
         if mqtt_client is None:
             if not connect_mqtt():

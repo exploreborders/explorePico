@@ -66,11 +66,44 @@ def scan_and_connect(
     if blink_fn:
         blink_fn("10")
 
+    try:
+        return _scan_and_connect_impl(networks, timeout, log_fn, blink_fn)
+    except Exception as e:
+        if log_fn:
+            log_fn("WiFi", f"Scan failed: {e}")
+        if blink_fn:
+            blink_fn("111")
+        return False
+
+
+def _scan_and_connect_impl(
+    networks: list[tuple[str, str]],
+    timeout: int = 10,
+    log_fn=None,
+    blink_fn=None,
+) -> bool:
     if log_fn:
         log_fn("WiFi", "Scanning for networks...")
 
     wlan = get_wlan()
-    wlan.active(True)
+
+    # Deactivate and reactivate WiFi to ensure clean state after soft reset
+    # Also disconnect first to clear any previous connection state
+    try:
+        wlan.disconnect()
+    except OSError:
+        pass
+    time.sleep(0.5)
+
+    try:
+        wlan.active(False)
+        time.sleep(0.5)
+        wlan.active(True)
+    except OSError:
+        pass
+
+    # Wait for radio to be ready
+    time.sleep(2)
 
     # Retry scan — CYW43 radio can take a few seconds to be ready
     scan_results = []
@@ -83,16 +116,46 @@ def scan_and_connect(
                 log_fn("WiFi", "Scan timeout reached")
             break
         time.sleep(1)
-        scan_results = wlan.scan()
-        if scan_results:
-            break
+        try:
+            results = wlan.scan()
+            # Validate entire results structure first
+            if not isinstance(results, list):
+                if log_fn:
+                    log_fn("WiFi", f"Scan returned unexpected type: {type(results)}")
+                continue
+            # Validate each result individually
+            for r in results:
+                if not isinstance(r, (tuple, list)):
+                    continue
+                if len(r) < 1:
+                    continue
+                scan_results.append(r)
+            if scan_results:
+                break
+        except OSError as e:
+            if log_fn:
+                log_fn("WiFi", f"Scan error: {e}")
+        except Exception as e:
+            if log_fn:
+                log_fn("WiFi", f"Scan exception: {e}")
 
-    # Extract available SSIDs, skip any that can't be decoded
+    # Extract available SSIDs, skip any that can't be decoded or are corrupted
     available_ssids = set()
+    if not isinstance(scan_results, list):
+        scan_results = []
+
     for result in scan_results:
         try:
-            available_ssids.add(result[0].decode("utf-8"))
-        except UnicodeError:
+            # Each result should be a tuple with at least 1 element (ssid)
+            if not isinstance(result, (tuple, list)):
+                continue
+            if len(result) < 1:
+                continue
+            ssid = result[0]
+            if not isinstance(ssid, bytes):
+                continue
+            available_ssids.add(ssid.decode("utf-8"))
+        except (UnicodeError, IndexError, OSError, TypeError):
             pass
 
     if log_fn:
@@ -100,24 +163,32 @@ def scan_and_connect(
 
     # Find first configured network that's available
     for ssid, password in networks:
-        if ssid in available_ssids:
+        try:
+            if ssid in available_ssids:
+                if log_fn:
+                    log_fn("WiFi", f"Found {ssid}, connecting...")
+
+                # Connect to the network
+                wlan.connect(ssid, password)
+
+                for _ in range(timeout):
+                    if wlan.isconnected():
+                        if blink_fn:
+                            blink_fn("1010")
+                        if log_fn:
+                            try:
+                                ip = wlan.ifconfig()[0]
+                            except (OSError, IndexError):
+                                ip = "unknown"
+                            log_fn("WiFi", f"Connected! IP: {ip}")
+                        return True
+                    time.sleep(1)
+
+                if log_fn:
+                    log_fn("WiFi", f"Failed to connect to {ssid}")
+        except Exception as e:
             if log_fn:
-                log_fn("WiFi", f"Found {ssid}, connecting...")
-
-            # Connect to the network
-            wlan.connect(ssid, password)
-
-            for _ in range(timeout):
-                if wlan.isconnected():
-                    if blink_fn:
-                        blink_fn("1010")
-                    if log_fn:
-                        log_fn("WiFi", f"Connected! IP: {wlan.ifconfig()[0]}")
-                    return True
-                time.sleep(1)
-
-            if log_fn:
-                log_fn("WiFi", f"Failed to connect to {ssid}")
+                log_fn("WiFi", f"Connection error: {e}")
 
     if log_fn:
         log_fn("WiFi", "No configured networks found")
