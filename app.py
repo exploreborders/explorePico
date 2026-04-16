@@ -324,14 +324,21 @@ last_mma845x_read = 0
 # -----------------------------------------------------------------------------
 def mqtt_publish(topic: str, value: str, retain: bool = True) -> bool:
     """Publish to MQTT only if value changed. Returns True if published."""
-    global _last_mqtt_values
+    global _last_mqtt_values, mqtt_client
 
     key = (topic, retain)
     if _last_mqtt_values.get(key) != value:
         try:
-            mqtt_client.publish(topic, value, retain=retain)
+            result = mqtt_client.publish(topic, value, retain=retain)
         except (OSError, AttributeError):
+            disconnect_mqtt()
             return False
+
+        if result in ("TIMEOUT", "ERROR"):
+            log("MQTT", f"Publish failed: {result}")
+            disconnect_mqtt()
+            return False
+
         _last_mqtt_values[key] = value
         return True
     return False
@@ -566,7 +573,10 @@ def publish_all_sensors() -> None:
         )
     # Single message check after the entire batch (reduces UART overhead)
     if mqtt_client:
-        mqtt_client.check_msg()
+        try:
+            mqtt_client.check_msg()
+        except (OSError, EOFError):
+            disconnect_mqtt()
 
 
 def publish_led_state() -> None:
@@ -941,9 +951,13 @@ def disconnect_mqtt() -> None:
 # -----------------------------------------------------------------------------
 def handle_mqtt_message() -> None:
     """Check for and handle incoming MQTT messages."""
+    global mqtt_client
     if mqtt_client is None:
         return
-    mqtt_client.check_msg()
+    try:
+        mqtt_client.check_msg()
+    except (OSError, EOFError):
+        disconnect_mqtt()
 
 
 def handle_sensor_publish() -> None:
@@ -1050,9 +1064,14 @@ def handle_gps_publish() -> None:
                 }
             )
             try:
-                mqtt_client.publish(TOPIC_DEVICE_TRACKER, gps_payload, retain=True)
+                result = mqtt_client.publish(
+                    TOPIC_DEVICE_TRACKER, gps_payload, retain=True
+                )
+                if result in ("TIMEOUT", "ERROR"):
+                    log("MQTT", f"GPS publish failed: {result}")
+                    disconnect_mqtt()
             except (OSError, AttributeError):
-                pass
+                disconnect_mqtt()
         elif _last_gps_fix:
             gps_payload = ujson.dumps(
                 {
@@ -1063,9 +1082,14 @@ def handle_gps_publish() -> None:
                 }
             )
             try:
-                mqtt_client.publish(TOPIC_DEVICE_TRACKER, gps_payload, retain=True)
+                result = mqtt_client.publish(
+                    TOPIC_DEVICE_TRACKER, gps_payload, retain=True
+                )
+                if result in ("TIMEOUT", "ERROR"):
+                    log("MQTT", f"GPS publish failed: {result}")
+                    disconnect_mqtt()
             except (OSError, AttributeError):
-                pass
+                disconnect_mqtt()
         last_gps_publish = now
 
 
