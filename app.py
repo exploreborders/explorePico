@@ -388,10 +388,11 @@ def read_temperature() -> float:
 
 def connect_wifi() -> bool:
     """Connect to WiFi network with retry logic. Tries multiple networks."""
+    global wdt
     networks = [(WIFI_SSID, WIFI_PASSWORD)]
     if WIFI_SSID_2 and WIFI_PASSWORD_2:
         networks.append((WIFI_SSID_2, WIFI_PASSWORD_2))
-    return scan_and_connect(networks, log_fn=log, blink_fn=blink_pattern)
+    return scan_and_connect(networks, log_fn=log, blink_fn=blink_pattern, wdt=wdt)
 
 
 def ensure_wifi() -> bool:

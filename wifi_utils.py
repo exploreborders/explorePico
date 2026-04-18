@@ -49,6 +49,7 @@ def scan_and_connect(
     timeout: int = 10,
     log_fn=None,
     blink_fn=None,
+    wdt=None,
 ) -> bool:
     """Scan for available networks and connect to first available.
 
@@ -59,6 +60,7 @@ def scan_and_connect(
         timeout: Connection timeout in seconds
         log_fn: Optional logging function (tag, message) -> None
         blink_fn: Optional blink pattern function (pattern) -> None
+        wdt: Optional watchdog timer to feed during long operations
 
     Returns:
         True if connected to any network, False otherwise
@@ -67,7 +69,7 @@ def scan_and_connect(
         blink_fn("10")
 
     try:
-        return _scan_and_connect_impl(networks, timeout, log_fn, blink_fn)
+        return _scan_and_connect_impl(networks, timeout, log_fn, blink_fn, wdt)
     except Exception as e:
         if log_fn:
             log_fn("WiFi", f"Scan failed: {e}")
@@ -81,6 +83,7 @@ def _scan_and_connect_impl(
     timeout: int = 10,
     log_fn=None,
     blink_fn=None,
+    wdt=None,
 ) -> bool:
     if log_fn:
         log_fn("WiFi", "Scanning for networks...")
@@ -111,6 +114,10 @@ def _scan_and_connect_impl(
     scan_timeout_ms = 10000  # 10 seconds max for scanning
 
     for _ in range(3):
+        # Feed watchdog during scan to prevent WDT reset
+        if wdt:
+            wdt.feed()
+
         if time.ticks_diff(time.ticks_ms(), scan_start) > scan_timeout_ms:
             if log_fn:
                 log_fn("WiFi", "Scan timeout reached")
@@ -172,6 +179,10 @@ def _scan_and_connect_impl(
                 wlan.connect(ssid, password)
 
                 for _ in range(timeout):
+                    # Feed watchdog during connection to prevent WDT reset
+                    if wdt:
+                        wdt.feed()
+
                     if wlan.isconnected():
                         if blink_fn:
                             blink_fn("1010")
