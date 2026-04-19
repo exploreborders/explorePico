@@ -897,11 +897,22 @@ def connect_mqtt() -> bool:
             mqtt_client.subscribe(topic)
         log("MQTT", "Subscribed!")
 
+        # Wait briefly for retained states from HA and apply them
+        log("MQTT", "Retrieving retained states...")
+        for _ in range(10):
+            if wdt:
+                wdt.feed()
+            try:
+                mqtt_client.check_msg()
+            except (OSError, EOFError):
+                break
+            time.sleep(0.1)
+
         time.sleep(MQTT_DELAY_INITIAL_STATE)
         publish_led_state()
         for i, topic in enumerate(RELAY_STATE_TOPICS):
             state = "ON" if relay_manager.get_relay(i) else "OFF"
-            mqtt_publish(topic, state)
+            mqtt_publish(topic, state, retain=True)
         # Publish accelerometer measure state
         mqtt_publish(
             TOPIC_ACCEL_MEASURE_STATE, "ON" if accel_measure_enabled else "OFF"

@@ -359,6 +359,7 @@ mqtt:
       state_topic: "homeassistant/pico/switch/led/state"
       payload_on: "ON"
       payload_off: "OFF"
+      retain: true
       availability:
         topic: "homeassistant/pico/availability"
         payload_available: "online"
@@ -375,6 +376,7 @@ mqtt:
       state_topic: "homeassistant/pico/switch/relay_1/state"
       payload_on: "ON"
       payload_off: "OFF"
+      retain: true
       availability:
         topic: "homeassistant/pico/availability"
         payload_available: "online"
@@ -391,6 +393,7 @@ mqtt:
       state_topic: "homeassistant/pico/switch/relay_2/state"
       payload_on: "ON"
       payload_off: "OFF"
+      retain: true
       availability:
         topic: "homeassistant/pico/availability"
         payload_available: "online"
@@ -407,6 +410,7 @@ mqtt:
       state_topic: "homeassistant/pico/switch/relay_3/state"
       payload_on: "ON"
       payload_off: "OFF"
+      retain: true
       availability:
         topic: "homeassistant/pico/availability"
         payload_available: "online"
@@ -423,6 +427,7 @@ mqtt:
       state_topic: "homeassistant/pico/switch/relay_4/state"
       payload_on: "ON"
       payload_off: "OFF"
+      retain: true
       availability:
         topic: "homeassistant/pico/availability"
         payload_available: "online"
